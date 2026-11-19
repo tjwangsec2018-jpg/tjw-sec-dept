@@ -1,0 +1,19 @@
+Build a full-stack Corporate Secretarial Resolution App using React, TypeScript, Node.js, and Firebase (Authentication, Cloud Firestore, Cloud Storage, and Firebase Cloud Messaging) designed as an installable mobile app (PWA + Capacitor-ready) for iOS and Android, alongside a desktop Admin Portal.
+
+1. Role-Based Login (Persistent Session):
+- Authenticate via Email/Password or Phone OTP so directors log in once and remain logged in permanently.
+- Route "admin" users to the Desktop Secretarial Dashboard and "director" users to the Mobile App Interface.
+
+2. Director Mobile App Experience (iOS & Android UI):
+- App Icon Badge & Push Notifications: Integrate Firebase Cloud Messaging (FCM) and Web App Badging API (navigator.setAppBadge) so the app icon displays the exact count of unsigned resolutions until completed.
+- Home Screen ("Pending Signatures"): Mobile-first bottom-tab navigation (Pending, Signed Archive, Companies). Highlight overdue resolutions in crimson red with a live countdown (e.g., "Due in 2 days" or "Overdue by 3 days").
+- Peer Accountability Indicator: Show co-director progress on each card (e.g., "1 of 2 Directors have signed").
+- In-App PDF Viewer & Signing: Let directors read the full resolution PDF inside the app, then choose between: (A) "Draw E-Signature" on a smooth touch canvas (which stamps the signature and date onto the PDF), or (B) "Upload Wet-Ink Scan" using their phone camera or file picker.
+
+3. Secretarial Firm Admin Portal (Desktop UI):
+- Live Tracking Board: Filter all resolutions by Company, Status (Pending, Viewed, Partially Signed, Signed, Overdue), and Statutory Deadline.
+- Upload & Assign: Upload a resolution PDF, select the client company, set the statutory due date, and assign one or more directors. Submitting automatically triggers an instant push notification to those directors' phones.
+- Automated Escalation Rules: Built-in reminder schedule that automatically dispatches push notifications to unsigned directors at 3 days, 7 days, and 48 hours before the deadline, plus a manual "Send Instant Push Nudge" button.
+
+4. Design System:
+- Executive corporate theme (deep navy #0F172A, crisp white cards, amber #D97706 for pending, crimson #DC2626 for overdue, emerald #059669 for signed). Mobile screens must feel like a native iOS/Android banking app with large touch targets and zero clutter.

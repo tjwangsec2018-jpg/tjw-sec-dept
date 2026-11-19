@@ -1,0 +1,393 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        (request.auth.token.phone_number is string && request.auth.token.phone_number.size() >= 5)
+      );
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email == 'tjwangsec2018@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBoundedStringList(arr, maxLen) {
+      return arr is list &&
+        arr.size() <= maxLen &&
+        (arr.size() == 0 || (arr[0] is string && arr[0].size() >= 1 && arr[0].size() <= 200));
+    }
+
+    function isAssignedToCompany(data) {
+      return isSignedIn() && (
+        request.auth.uid in data.directorUids ||
+        (request.auth.token.email_verified == true && request.auth.token.email in data.directorEmails)
+      );
+    }
+
+    function isAssignedToResolution(data) {
+      return isSignedIn() && (
+        request.auth.uid in data.assignedDirectorUids ||
+        (request.auth.token.email_verified == true && request.auth.token.email in data.assignedDirectorEmails)
+      );
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'email', 'phone', 'role', 'designation', 'fcmToken', 'notificationsEnabled', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.uid == userId &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 160)) &&
+        (!('phone' in data) || (data.phone is string && data.phone.size() <= 32)) &&
+        data.role in ['admin', 'director'] &&
+        (!('designation' in data) || (data.designation is string && data.designation.size() <= 120)) &&
+        (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 512)) &&
+        (!('notificationsEnabled' in data) || data.notificationsEnabled is bool) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'grantedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'grantedAt']) &&
+        isValidId(data.uid) &&
+        data.uid == userId &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        data.grantedAt is timestamp;
+    }
+
+    function isValidCompany(data) {
+      return data.keys().hasAll([
+          'name', 'uen', 'jurisdiction', 'registeredAddress', 'incorporationDate',
+          'directorUids', 'directorEmails', 'directorNames', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'name', 'uen', 'jurisdiction', 'registeredAddress', 'incorporationDate',
+          'directorUids', 'directorEmails', 'directorNames', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 160 &&
+        data.uen is string && data.uen.size() >= 3 && data.uen.size() <= 40 && data.uen.matches('^[A-Z0-9\\-]+$') &&
+        data.jurisdiction is string && data.jurisdiction.size() >= 2 && data.jurisdiction.size() <= 80 &&
+        data.registeredAddress is string && data.registeredAddress.size() >= 5 && data.registeredAddress.size() <= 240 &&
+        data.incorporationDate is string && data.incorporationDate.size() >= 10 && data.incorporationDate.size() <= 20 &&
+        isBoundedStringList(data.directorUids, 20) &&
+        isBoundedStringList(data.directorEmails, 20) &&
+        isBoundedStringList(data.directorNames, 20) &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidResolution(data) {
+      return data.keys().hasAll([
+          'title', 'referenceCode', 'companyId', 'companyName', 'category',
+          'summary', 'bodyText', 'pdfUrl', 'pdfFileName', 'statutoryDueDate',
+          'status', 'assignedDirectorUids', 'assignedDirectorEmails', 'assignedDirectorNames',
+          'signedByUids', 'signedByEmails', 'viewedByUids', 'requiredSignatures',
+          'escalationSchedule', 'sentEscalations', 'lastNudgedAt', 'nudgeCount',
+          'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'referenceCode', 'companyId', 'companyName', 'category',
+          'summary', 'bodyText', 'pdfUrl', 'pdfFileName', 'statutoryDueDate',
+          'status', 'assignedDirectorUids', 'assignedDirectorEmails', 'assignedDirectorNames',
+          'signedByUids', 'signedByEmails', 'viewedByUids', 'requiredSignatures',
+          'escalationSchedule', 'sentEscalations', 'lastNudgedAt', 'nudgeCount',
+          'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 3 && data.title.size() <= 200 &&
+        data.referenceCode is string && data.referenceCode.size() >= 3 && data.referenceCode.size() <= 40 && data.referenceCode.matches('^[A-Z0-9\\-]+$') &&
+        isValidId(data.companyId) &&
+        data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 160 &&
+        data.category in ['Board Resolution', 'Shareholder Resolution', 'AGM Notice', 'Bank Mandate', 'Allotment of Shares'] &&
+        data.summary is string && data.summary.size() >= 5 && data.summary.size() <= 2000 &&
+        data.bodyText is string && data.bodyText.size() >= 10 && data.bodyText.size() <= 15000 &&
+        data.pdfUrl is string && data.pdfUrl.size() <= 2000 &&
+        data.pdfFileName is string && data.pdfFileName.size() >= 1 && data.pdfFileName.size() <= 200 &&
+        data.statutoryDueDate is string && data.statutoryDueDate.size() >= 10 && data.statutoryDueDate.size() <= 30 &&
+        data.status in ['pending', 'viewed', 'partially_signed', 'signed', 'overdue'] &&
+        isBoundedStringList(data.assignedDirectorUids, 20) &&
+        isBoundedStringList(data.assignedDirectorEmails, 20) &&
+        isBoundedStringList(data.assignedDirectorNames, 20) &&
+        isBoundedStringList(data.signedByUids, 20) &&
+        isBoundedStringList(data.signedByEmails, 20) &&
+        isBoundedStringList(data.viewedByUids, 20) &&
+        data.requiredSignatures is int && data.requiredSignatures >= 1 && data.requiredSignatures <= 20 &&
+        isBoundedStringList(data.escalationSchedule, 5) &&
+        isBoundedStringList(data.sentEscalations, 10) &&
+        data.lastNudgedAt is string && data.lastNudgedAt.size() <= 40 &&
+        data.nudgeCount is int && data.nudgeCount >= 0 && data.nudgeCount <= 500 &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSignature(data, resolutionId) {
+      return data.keys().hasAll([
+          'resolutionId', 'directorUid', 'directorName', 'directorEmail',
+          'method', 'signatureDataUrl', 'signedPdfUrl', 'signedAt', 'deviceNote'
+        ]) &&
+        data.keys().hasOnly([
+          'resolutionId', 'directorUid', 'directorName', 'directorEmail',
+          'method', 'signatureDataUrl', 'signedPdfUrl', 'signedAt', 'deviceNote'
+        ]) &&
+        isValidId(data.resolutionId) &&
+        data.resolutionId == resolutionId &&
+        isValidId(data.directorUid) &&
+        data.directorUid == request.auth.uid &&
+        data.directorName is string && data.directorName.size() >= 1 && data.directorName.size() <= 120 &&
+        data.directorEmail is string && data.directorEmail.size() >= 3 && data.directorEmail.size() <= 160 &&
+        data.method in ['e-signature', 'wet-ink-scan'] &&
+        data.signatureDataUrl is string && data.signatureDataUrl.size() >= 1 && data.signatureDataUrl.size() <= 300000 &&
+        data.signedPdfUrl is string && data.signedPdfUrl.size() <= 2000 &&
+        data.signedAt is timestamp &&
+        data.deviceNote is string && data.deviceNote.size() >= 1 && data.deviceNote.size() <= 200;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll([
+          'recipientUid', 'recipientEmail', 'resolutionId', 'resolutionTitle',
+          'companyName', 'type', 'message', 'read', 'createdBy', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'recipientUid', 'recipientEmail', 'resolutionId', 'resolutionTitle',
+          'companyName', 'type', 'message', 'read', 'createdBy', 'createdAt'
+        ]) &&
+        data.recipientUid is string && data.recipientUid.size() <= 128 &&
+        data.recipientEmail is string && data.recipientEmail.size() >= 3 && data.recipientEmail.size() <= 160 &&
+        isValidId(data.resolutionId) &&
+        data.resolutionTitle is string && data.resolutionTitle.size() >= 1 && data.resolutionTitle.size() <= 200 &&
+        data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 160 &&
+        data.type in ['assignment', 'escalation_7d', 'escalation_3d', 'escalation_48h', 'manual_nudge', 'signed_confirmation'] &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 500 &&
+        data.read is bool &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp;
+    }
+
+    // 4. Collection: /users/{userId} (PII Isolated)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          (isOwner(userId) && incoming().role == 'director') ||
+          isAdmin()
+        );
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'designation', 'fcmToken', 'notificationsEnabled', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // 5. Collection: /admins/{userId}
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isAdmin() &&
+        isValidId(userId) &&
+        isValidAdminRecord(incoming(), userId) &&
+        incoming().grantedAt == request.time;
+      allow update: if false;
+      allow delete: if isBootstrappedAdmin() && isValidId(userId);
+    }
+
+    // 6. Collection: /companies/{companyId}
+    match /companies/{companyId} {
+      allow get: if isSignedIn() && isValidId(companyId) && (isAdmin() || isAssignedToCompany(existing()));
+      allow list: if isBootstrappedAdmin() ||
+        (isSignedIn() && resource.data.createdBy == request.auth.uid) ||
+        isAssignedToCompany(resource.data);
+      allow create: if isAdmin() &&
+        isValidId(companyId) &&
+        isValidCompany(incoming()) &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() &&
+        isValidId(companyId) &&
+        isValidCompany(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'uen', 'jurisdiction', 'registeredAddress', 'incorporationDate',
+          'directorUids', 'directorEmails', 'directorNames', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(companyId);
+    }
+
+    // 7. Collection: /resolutions/{resolutionId}
+    match /resolutions/{resolutionId} {
+      allow get: if isSignedIn() && isValidId(resolutionId) && (isAdmin() || isAssignedToResolution(existing()));
+      allow list: if isBootstrappedAdmin() ||
+        (isSignedIn() && resource.data.createdBy == request.auth.uid) ||
+        isAssignedToResolution(resource.data);
+      allow create: if isAdmin() &&
+        isValidId(resolutionId) &&
+        isValidResolution(incoming()) &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/companies/$(incoming().companyId));
+      allow update: if isVerifiedUser() &&
+        isValidId(resolutionId) &&
+        isValidResolution(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().companyId == existing().companyId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Tier 1: Admin full operational updates (including status/nudge/escalation/deadline overrides)
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'summary', 'bodyText', 'pdfUrl', 'pdfFileName', 'statutoryDueDate',
+              'status', 'assignedDirectorUids', 'assignedDirectorEmails', 'assignedDirectorNames',
+              'signedByUids', 'signedByEmails', 'viewedByUids', 'requiredSignatures',
+              'escalationSchedule', 'sentEscalations', 'lastNudgedAt', 'nudgeCount', 'updatedAt'
+            ])
+          ) ||
+          // Tier 2 Action A: Assigned Director marks resolution as viewed (blocked if terminal 'signed')
+          (
+            existing().status != 'signed' &&
+            isAssignedToResolution(existing()) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['viewedByUids', 'status', 'updatedAt']) &&
+            request.auth.uid in incoming().viewedByUids &&
+            incoming().status in ['viewed', 'partially_signed', 'overdue']
+          ) ||
+          // Tier 2 Action B: Assigned Director signs resolution (blocked if terminal 'signed')
+          (
+            existing().status != 'signed' &&
+            isAssignedToResolution(existing()) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['signedByUids', 'signedByEmails', 'viewedByUids', 'status', 'pdfUrl', 'updatedAt']) &&
+            request.auth.uid in incoming().signedByUids &&
+            incoming().signedByUids.hasAll(existing().signedByUids) &&
+            incoming().signedByEmails.hasAll(existing().signedByEmails) &&
+            incoming().signedByUids.size() >= existing().signedByUids.size() &&
+            incoming().status in ['partially_signed', 'signed']
+          )
+        );
+      allow delete: if isAdmin() && isValidId(resolutionId);
+
+      // 8. Subcollection: /resolutions/{resolutionId}/signatures/{signatureId}
+      match /signatures/{signatureId} {
+        allow get: if isSignedIn() && isValidId(resolutionId) && isValidId(signatureId) && (
+          isAdmin() ||
+          existing().directorUid == request.auth.uid ||
+          isAssignedToResolution(get(/databases/$(database)/documents/resolutions/$(resolutionId)).data)
+        );
+        allow list: if isBootstrappedAdmin() ||
+          (isSignedIn() && resource.data.directorUid == request.auth.uid) ||
+          (isSignedIn() && request.auth.token.email_verified == true && resource.data.directorEmail == request.auth.token.email);
+        allow create: if isVerifiedUser() &&
+          isValidId(resolutionId) &&
+          isValidId(signatureId) &&
+          isValidSignature(incoming(), resolutionId) &&
+          incoming().signedAt == request.time &&
+          // Pillar 1: Master Gate on parent resolution
+          exists(/databases/$(database)/documents/resolutions/$(resolutionId)) &&
+          get(/databases/$(database)/documents/resolutions/$(resolutionId)).data.status != 'signed' &&
+          (
+            isAdmin() ||
+            isAssignedToResolution(get(/databases/$(database)/documents/resolutions/$(resolutionId)).data)
+          ) &&
+          // Pillar 7: Atomicity Guarantee via getAfter
+          request.auth.uid in getAfter(/databases/$(database)/documents/resolutions/$(resolutionId)).data.signedByUids;
+        allow update: if false;
+        allow delete: if isAdmin() && isValidId(resolutionId) && isValidId(signatureId);
+      }
+    }
+
+    // 9. Collection: /notifications/{notificationId}
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && isValidId(notificationId) && (
+        isAdmin() ||
+        existing().recipientUid == request.auth.uid ||
+        (request.auth.token.email_verified == true && existing().recipientEmail == request.auth.token.email)
+      );
+      allow list: if isBootstrappedAdmin() ||
+        (isSignedIn() && resource.data.createdBy == request.auth.uid) ||
+        (isSignedIn() && resource.data.recipientUid == request.auth.uid) ||
+        (isSignedIn() && request.auth.token.email_verified == true && resource.data.recipientEmail == request.auth.token.email);
+      allow create: if isVerifiedUser() &&
+        isValidId(notificationId) &&
+        isValidNotification(incoming()) &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/resolutions/$(incoming().resolutionId)) &&
+        (
+          isAdmin() ||
+          incoming().type == 'signed_confirmation'
+        );
+      allow update: if isVerifiedUser() &&
+        isValidId(notificationId) &&
+        isValidNotification(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().resolutionId == existing().resolutionId &&
+        (
+          isAdmin() ||
+          (
+            (existing().recipientUid == request.auth.uid || (request.auth.token.email_verified == true && existing().recipientEmail == request.auth.token.email)) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['read'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(notificationId);
+    }
+  }
+}

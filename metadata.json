@@ -1,0 +1,6 @@
+{
+  "name": "QuorumSeal — Corporate Secretarial Resolution Platform",
+  "description": "Executive corporate secretarial resolution signing app (PWA + Capacitor-ready) and desktop administration portal with Firebase Authentication, Cloud Firestore, Cloud Storage, and Push Notifications.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

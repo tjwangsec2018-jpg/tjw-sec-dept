@@ -1,0 +1,461 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated director or secretarial firm administrator profile with PII isolated to owner and admins.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "director"]
+        },
+        "designation": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "fcmToken": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "notificationsEnabled": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted marker document designating a secretarial firm administrator.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "grantedAt"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Client corporate entity managed by the secretarial firm.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "uen": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "jurisdiction": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "registeredAddress": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 240
+        },
+        "incorporationDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "directorUids": {
+          "type": "array",
+          "description": "Bounded list of up to 20 assigned director UIDs"
+        },
+        "directorEmails": {
+          "type": "array",
+          "description": "Bounded list of up to 20 assigned director emails"
+        },
+        "directorNames": {
+          "type": "array",
+          "description": "Bounded list of up to 20 director display names"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "name",
+        "uen",
+        "jurisdiction",
+        "registeredAddress",
+        "incorporationDate",
+        "directorUids",
+        "directorEmails",
+        "directorNames",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Resolution": {
+      "title": "Resolution",
+      "description": "Corporate board or shareholder resolution requiring director execution.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "referenceCode": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "companyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "companyName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Board Resolution",
+            "Shareholder Resolution",
+            "AGM Notice",
+            "Bank Mandate",
+            "Allotment of Shares"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 2000
+        },
+        "bodyText": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 15000
+        },
+        "pdfUrl": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "pdfFileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "statutoryDueDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 30
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "viewed", "partially_signed", "signed", "overdue"]
+        },
+        "assignedDirectorUids": {
+          "type": "array",
+          "description": "Bounded list of up to 20 director UIDs"
+        },
+        "assignedDirectorEmails": {
+          "type": "array",
+          "description": "Bounded list of up to 20 director emails"
+        },
+        "assignedDirectorNames": {
+          "type": "array",
+          "description": "Bounded list of up to 20 director names"
+        },
+        "signedByUids": {
+          "type": "array",
+          "description": "Bounded list of up to 20 UIDs who have signed"
+        },
+        "signedByEmails": {
+          "type": "array",
+          "description": "Bounded list of up to 20 emails who have signed"
+        },
+        "viewedByUids": {
+          "type": "array",
+          "description": "Bounded list of up to 20 UIDs who have opened the resolution"
+        },
+        "requiredSignatures": {
+          "type": "integer"
+        },
+        "escalationSchedule": {
+          "type": "array",
+          "description": "Up to 5 reminder thresholds e.g. 7d, 3d, 48h"
+        },
+        "sentEscalations": {
+          "type": "array",
+          "description": "Up to 10 escalation tags already sent"
+        },
+        "lastNudgedAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "nudgeCount": {
+          "type": "integer"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "title",
+        "referenceCode",
+        "companyId",
+        "companyName",
+        "category",
+        "summary",
+        "bodyText",
+        "pdfUrl",
+        "pdfFileName",
+        "statutoryDueDate",
+        "status",
+        "assignedDirectorUids",
+        "assignedDirectorEmails",
+        "assignedDirectorNames",
+        "signedByUids",
+        "signedByEmails",
+        "viewedByUids",
+        "requiredSignatures",
+        "escalationSchedule",
+        "sentEscalations",
+        "lastNudgedAt",
+        "nudgeCount",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ResolutionSignature": {
+      "title": "ResolutionSignature",
+      "description": "Immutable director signature record (drawn e-signature or wet-ink scan) attached to a resolution.",
+      "type": "object",
+      "properties": {
+        "resolutionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "directorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "directorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "directorEmail": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "method": {
+          "type": "string",
+          "enum": ["e-signature", "wet-ink-scan"]
+        },
+        "signatureDataUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300000
+        },
+        "signedPdfUrl": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "signedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "deviceNote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "resolutionId",
+        "directorUid",
+        "directorName",
+        "directorEmail",
+        "method",
+        "signatureDataUrl",
+        "signedPdfUrl",
+        "signedAt",
+        "deviceNote"
+      ]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "Push notification and automated escalation dispatch record targeted to a director.",
+      "type": "object",
+      "properties": {
+        "recipientUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "recipientEmail": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "resolutionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "resolutionTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "companyName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "assignment",
+            "escalation_7d",
+            "escalation_3d",
+            "escalation_48h",
+            "manual_nudge",
+            "signed_confirmation"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "read": {
+          "type": "boolean"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "recipientUid",
+        "recipientEmail",
+        "resolutionId",
+        "resolutionTitle",
+        "companyName",
+        "type",
+        "message",
+        "read",
+        "createdBy",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles containing PII (email, phone, FCM token), accessible only by the owner or secretarial admins."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator lookup collection for RBAC."
+    },
+    "/companies/{companyId}": {
+      "schema": { "$ref": "#/entities/Company" },
+      "description": "Client companies managed by the secretarial firm and accessible to their assigned directors."
+    },
+    "/resolutions/{resolutionId}": {
+      "schema": { "$ref": "#/entities/Resolution" },
+      "description": "Corporate resolutions tracked by status, statutory deadline, and director execution."
+    },
+    "/resolutions/{resolutionId}/signatures/{signatureId}": {
+      "schema": { "$ref": "#/entities/ResolutionSignature" },
+      "description": "Immutable director signatures linked to parent resolutions."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "Push notification and statutory escalation records for directors."
+    }
+  }
+}
