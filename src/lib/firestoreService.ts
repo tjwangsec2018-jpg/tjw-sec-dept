@@ -65,7 +65,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
     }
 
     // Check /admins/{uid} marker
-    let role: UserRole = isBootstrapped ? 'admin' : 'director';
+    let role: UserRole = isBootstrapped ? 'admin' : 'user';
     if (!isBootstrapped && user.emailVerified) {
       try {
         const adminSnap = await getDoc(doc(db, 'admins', user.uid));

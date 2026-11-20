@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type UserRole = 'admin' | 'director';
+export type UserRole = 'admin' | 'user';
 
 export type ResolutionCategory =
   | 'Board Resolution'
