@@ -1174,4 +1174,54 @@ export async function revokeAndDeleteUser(
   }
 }
 
+export async function activateUserTwoFactor(user: User, secret: string, role: UserRole): Promise<void> {
+  const path = `users/${user.uid}`;
+  try {
+    const userRef = doc(db, 'users', user.uid);
+    await updateDoc(userRef, {
+      twoFactorEnabled: true,
+      twoFactorMethod: 'totp',
+      twoFactorSecret: secret,
+      twoFactorActivatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await recordAuditLog({
+      user,
+      role,
+      action: '2FA_ACTIVATED',
+      details: 'User successfully activated Two-Factor Authentication (TOTP).',
+      targetId: user.uid,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function resetUserTwoFactor(
+  adminUser: User,
+  targetUid: string,
+  targetEmail: string,
+  approvalReason: string
+): Promise<void> {
+  const path = `users/${targetUid}`;
+  try {
+    const userRef = doc(db, 'users', targetUid);
+    await updateDoc(userRef, {
+      twoFactorEnabled: false,
+      twoFactorSecret: '',
+      updatedAt: serverTimestamp(),
+    });
+    await recordAuditLog({
+      user: adminUser,
+      role: 'admin',
+      action: 'USER_2FA_RESET',
+      details: `System Administrator reset 2FA for user "${targetEmail}" (UID: ${targetUid}). Reason: ${approvalReason}`,
+      targetId: targetUid,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+
 

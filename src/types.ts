@@ -37,6 +37,8 @@ export interface UserProfile {
   notificationsEnabled?: boolean;
   twoFactorEnabled?: boolean;
   twoFactorMethod?: 'sms' | 'email' | 'totp';
+  twoFactorSecret?: string;
+  twoFactorActivatedAt?: Timestamp;
   companyIds?: string[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

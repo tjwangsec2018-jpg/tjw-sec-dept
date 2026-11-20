@@ -40,6 +40,24 @@
         "notificationsEnabled": {
           "type": "boolean"
         },
+        "twoFactorEnabled": {
+          "type": "boolean"
+        },
+        "twoFactorMethod": {
+          "type": "string",
+          "enum": ["sms", "email", "totp"]
+        },
+        "twoFactorSecret": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "twoFactorActivatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "companyIds": {
+          "type": "array"
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time"

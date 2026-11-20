@@ -45,6 +45,7 @@ import {
   updateSystemSecuritySettings,
   deleteCompanyAndAssociatedResolutions,
   revokeAndDeleteUser,
+  resetUserTwoFactor,
 } from '../lib/firestoreService';
 import { AdminUploadModal, NewCompanyModal } from './AdminUploadModal';
 import { ResolutionViewerModal } from './ResolutionViewerModal';
@@ -144,6 +145,34 @@ export const AdminPortal: React.FC<Props> = ({
   const [userDeleteTargetUid, setUserDeleteTargetUid] = useState('');
   const [userDeleteConfirmEmail, setUserDeleteConfirmEmail] = useState('');
   const [deletingUser, setDeletingUser] = useState(false);
+
+  const [reset2FaTargetUid, setReset2FaTargetUid] = useState('');
+  const [reset2FaReason, setReset2FaReason] = useState('');
+  const [resetting2Fa, setResetting2Fa] = useState(false);
+
+  const handleExecuteReset2Fa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetU = authorizedUsers.find((u) => u.uid === reset2FaTargetUid);
+    if (!targetU || !targetU.email) {
+      notify('Please select a valid real user account.');
+      return;
+    }
+    if (!reset2FaReason.trim()) {
+      notify('Approval reason is required to reset user 2FA.');
+      return;
+    }
+    setResetting2Fa(true);
+    try {
+      await resetUserTwoFactor(user, targetU.uid, targetU.email, reset2FaReason.trim());
+      setReset2FaTargetUid('');
+      setReset2FaReason('');
+      notify(`2FA authenticator successfully reset for user "${targetU.email}". On next login, they will be forced to set up new 2FA.`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to reset user 2FA.');
+    } finally {
+      setResetting2Fa(false);
+    }
+  };
 
   useEffect(() => {
     const unsub = subscribeSystemSecuritySettings((settings) => {
@@ -1399,6 +1428,51 @@ export const AdminPortal: React.FC<Props> = ({
                       className="min-h-[42px] px-5 rounded-xl bg-[#DC2626] text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors cursor-pointer"
                     >
                       {deletingUser ? 'Deleting User...' : 'Permanently Revoke & Delete User'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* 4. Reset User 2FA Authenticator */}
+                <div className="p-5 rounded-xl bg-white border border-slate-200 space-y-4">
+                  <h3 className="text-sm font-semibold text-[#0F172A]">Reset User Two-Factor Authentication (2FA) Device</h3>
+                  <p className="text-xs text-slate-500">
+                    If a client has lost their authenticator device, reset their 2FA status so they are forced to set up a new authenticator app upon next login.
+                  </p>
+                  <form onSubmit={handleExecuteReset2Fa} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Select User Account</label>
+                      <select
+                        value={reset2FaTargetUid}
+                        onChange={(e) => setReset2FaTargetUid(e.target.value)}
+                        className="w-full min-h-[42px] px-3.5 rounded-xl border border-slate-300 text-xs text-[#0F172A] focus:outline-none focus:border-[#DC2626]"
+                      >
+                        <option value="">-- Choose user account for 2FA reset --</option>
+                        {authorizedUsers.map((u) => (
+                          <option key={u.uid} value={u.uid}>{u.displayName} ({u.email}) - 2FA: {u.twoFactorEnabled ? 'Active' : 'Inactive'}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {reset2FaTargetUid && (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          System Administrator Approval Reason *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={reset2FaReason}
+                          onChange={(e) => setReset2FaReason(e.target.value)}
+                          placeholder="e.g. Director lost smartphone device, verified via corporate passport scan"
+                          className="w-full min-h-[42px] px-3.5 rounded-xl border border-slate-300 text-xs text-[#0F172A] focus:outline-none focus:border-[#DC2626]"
+                        />
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={resetting2Fa || !reset2FaTargetUid || !reset2FaReason.trim()}
+                      className="min-h-[42px] px-5 rounded-xl bg-[#DC2626] text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                      {resetting2Fa ? 'Resetting 2FA...' : 'Reset User 2FA Authenticator'}
                     </button>
                   </form>
                 </div>
