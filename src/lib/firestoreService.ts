@@ -36,6 +36,7 @@ import {
   SignatureMethod,
   UserProfile,
   UserRole,
+  SystemSecuritySettings,
 } from '../types';
 import { generateResolutionPdfBytes } from './pdfEngine';
 
@@ -1069,4 +1070,108 @@ export async function deleteAuditLog(logId: string): Promise<void> {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
+
+export function subscribeSystemSecuritySettings(
+  onData: (settings: SystemSecuritySettings) => void
+): Unsubscribe {
+  const docRef = doc(db, 'system_settings', 'security');
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (snap.exists()) {
+        onData(snap.data() as SystemSecuritySettings);
+      } else {
+        onData({ enforceTwoFactor: false, twoFactorMethod: 'email' });
+      }
+    },
+    (err) => handleFirestoreError(err, OperationType.LIST, 'system_settings/security')
+  );
+}
+
+export async function updateSystemSecuritySettings(
+  adminUser: User,
+  enforceTwoFactor: boolean,
+  twoFactorMethod: 'sms' | 'email' | 'totp',
+  approvalReason: string
+): Promise<void> {
+  const path = 'system_settings/security';
+  try {
+    const docRef = doc(db, 'system_settings', 'security');
+    await setDoc(docRef, {
+      enforceTwoFactor,
+      twoFactorMethod,
+      updatedBy: adminUser.email || adminUser.uid,
+      updatedAt: serverTimestamp(),
+      approvalReason: clampString(approvalReason, 500),
+    });
+    await recordAuditLog({
+      user: adminUser,
+      role: 'admin',
+      action: '2FA_POLICY_UPDATED',
+      details: `System 2FA enforced: ${enforceTwoFactor} (Method: ${twoFactorMethod}). Reason: ${approvalReason}`,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteCompanyAndAssociatedResolutions(
+  adminUser: User,
+  companyId: string,
+  companyName: string,
+  confirmationName: string
+): Promise<void> {
+  if (companyName.trim().toLowerCase() !== confirmationName.trim().toLowerCase()) {
+    throw new Error('Confirmation company name does not match exact record name.');
+  }
+  const path = `companies/${companyId}`;
+  try {
+    const resQ = query(collection(db, 'resolutions'), where('companyId', '==', companyId));
+    const resSnap = await getDocs(resQ);
+    const batch = writeBatch(db);
+
+    resSnap.forEach((resDoc) => {
+      batch.delete(resDoc.ref);
+    });
+
+    batch.delete(doc(db, 'companies', companyId));
+    await batch.commit();
+
+    await recordAuditLog({
+      user: adminUser,
+      role: 'admin',
+      action: 'COMPANY_PERMANENTLY_DELETED',
+      details: `Permanent deletion of company "${companyName}" and ${resSnap.size} associated resolutions.`,
+      targetId: companyId,
+      companyName,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function revokeAndDeleteUser(
+  adminUser: User,
+  targetUid: string,
+  targetEmail: string,
+  confirmationEmail: string
+): Promise<void> {
+  if (targetEmail.trim().toLowerCase() !== confirmationEmail.trim().toLowerCase()) {
+    throw new Error('Confirmation email does not match exact user email.');
+  }
+  const path = `users/${targetUid}`;
+  try {
+    await deleteDoc(doc(db, 'users', targetUid));
+    await recordAuditLog({
+      user: adminUser,
+      role: 'admin',
+      action: 'USER_ACCOUNT_REVOKED_DELETED',
+      details: `Permanent revocation and deletion of user account "${targetEmail}" (UID: ${targetUid}).`,
+      targetId: targetUid,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
 

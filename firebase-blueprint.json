@@ -430,6 +430,19 @@
         "createdBy",
         "createdAt"
       ]
+    },
+    "SystemSecuritySettings": {
+      "title": "SystemSecuritySettings",
+      "description": "Application-wide 2FA enforcement policy and approval metadata.",
+      "type": "object",
+      "properties": {
+        "enforceTwoFactor": { "type": "boolean" },
+        "twoFactorMethod": { "type": "string", "enum": ["sms", "email", "totp"] },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "approvalReason": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["enforceTwoFactor", "twoFactorMethod"]
     }
   },
   "firestore": {
@@ -456,6 +469,10 @@
     "/notifications/{notificationId}": {
       "schema": { "$ref": "#/entities/NotificationItem" },
       "description": "Push notification and statutory escalation records for directors."
+    },
+    "/system_settings/{docId}": {
+      "schema": { "$ref": "#/entities/SystemSecuritySettings" },
+      "description": "System-wide security policy and 2FA settings."
     }
   }
 }

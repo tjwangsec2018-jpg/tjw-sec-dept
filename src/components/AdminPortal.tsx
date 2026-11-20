@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
   BellRing,
@@ -29,6 +29,7 @@ import {
   Resolution,
   ResolutionStatus,
   UserProfile,
+  SystemSecuritySettings,
 } from '../types';
 import { getDeadlineMetrics, getNextEscalationLabel } from '../lib/escalation';
 import {
@@ -40,6 +41,10 @@ import {
   createClientAuthAndProfile,
   runAutomatedEscalationSweep,
   sendManualPushNudge,
+  subscribeSystemSecuritySettings,
+  updateSystemSecuritySettings,
+  deleteCompanyAndAssociatedResolutions,
+  revokeAndDeleteUser,
 } from '../lib/firestoreService';
 import { AdminUploadModal, NewCompanyModal } from './AdminUploadModal';
 import { ResolutionViewerModal } from './ResolutionViewerModal';
@@ -123,6 +128,91 @@ export const AdminPortal: React.FC<Props> = ({
       notify(`Client company ${co.name} deleted permanently.`);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Failed to delete company.');
+    }
+  };
+
+  const [securitySettings, setSecuritySettings] = useState<SystemSecuritySettings>({ enforceTwoFactor: false, twoFactorMethod: 'email' });
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [approvalReason, setApprovalReason] = useState('');
+  const [pendingEnforceTwoFactor, setPendingEnforceTwoFactor] = useState(false);
+  const [pendingTwoFactorMethod, setPendingTwoFactorMethod] = useState<'sms' | 'email' | 'totp'>('email');
+
+  const [companyDeleteTargetId, setCompanyDeleteTargetId] = useState('');
+  const [companyDeleteConfirmName, setCompanyDeleteConfirmName] = useState('');
+  const [deletingCompany, setDeletingCompany] = useState(false);
+
+  const [userDeleteTargetUid, setUserDeleteTargetUid] = useState('');
+  const [userDeleteConfirmEmail, setUserDeleteConfirmEmail] = useState('');
+  const [deletingUser, setDeletingUser] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeSystemSecuritySettings((settings) => {
+      setSecuritySettings(settings);
+      setPendingEnforceTwoFactor(settings.enforceTwoFactor);
+      setPendingTwoFactorMethod(settings.twoFactorMethod || 'email');
+    });
+    return () => unsub();
+  }, []);
+
+  const handleOpen2FaApprovalModal = (enforce: boolean, method: 'sms' | 'email' | 'totp') => {
+    setPendingEnforceTwoFactor(enforce);
+    setPendingTwoFactorMethod(method);
+    setApprovalReason('');
+    setShowApprovalModal(true);
+  };
+
+  const handleConfirm2FaChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvalReason.trim()) {
+      notify('System Administrator approval reason is required.');
+      return;
+    }
+    try {
+      await updateSystemSecuritySettings(user, pendingEnforceTwoFactor, pendingTwoFactorMethod, approvalReason.trim());
+      setShowApprovalModal(false);
+      notify('System 2FA security settings successfully updated and logged in immutable audit trail.');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to update 2FA policy.');
+    }
+  };
+
+  const handleExecuteCompanyDangerDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetCo = companies.find((c) => c.id === companyDeleteTargetId);
+    if (!targetCo) {
+      notify('Please select a valid real company.');
+      return;
+    }
+    setDeletingCompany(true);
+    try {
+      await deleteCompanyAndAssociatedResolutions(user, targetCo.id, targetCo.name, companyDeleteConfirmName);
+      setCompanyDeleteTargetId('');
+      setCompanyDeleteConfirmName('');
+      notify(`Company "${targetCo.name}" and all associated resolutions permanently deleted.`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to delete company and resolutions.');
+    } finally {
+      setDeletingCompany(false);
+    }
+  };
+
+  const handleExecuteUserDangerDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetU = authorizedUsers.find((u) => u.uid === userDeleteTargetUid);
+    if (!targetU || !targetU.email) {
+      notify('Please select a valid real user account.');
+      return;
+    }
+    setDeletingUser(true);
+    try {
+      await revokeAndDeleteUser(user, targetU.uid, targetU.email, userDeleteConfirmEmail);
+      setUserDeleteTargetUid('');
+      setUserDeleteConfirmEmail('');
+      notify(`User account "${targetU.email}" permanently revoked and deleted.`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to revoke and delete user account.');
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -1191,6 +1281,128 @@ export const AdminPortal: React.FC<Props> = ({
                   )}
                 </div>
               </div>
+
+              {/* DANGER ZONE (Admin Only) */}
+              <div className="bg-white border-2 border-red-300 rounded-2xl p-6 lg:p-8 space-y-6 shadow-sm">
+                <div className="flex items-center gap-3 pb-4 border-b border-red-100">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center text-[#DC2626]">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-[#DC2626]">Danger Zone · High-Risk Administrative Controls</h2>
+                    <p className="text-xs text-slate-500">
+                      Restricted strictly to System Administrators. All actions require re-verification and record immutable entries in the audit trail.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 1. 2FA Policy & Approval Control */}
+                <div className="p-5 rounded-xl bg-red-50/50 border border-red-200 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#0F172A]">Enterprise Two-Factor Authentication (2FA) Policy</h3>
+                      <p className="text-xs text-slate-600">
+                        Current Status: <span className="font-mono font-bold">{securitySettings.enforceTwoFactor ? 'Enforced (Active)' : 'Optional / Disabled'}</span> ({securitySettings.twoFactorMethod?.toUpperCase() || 'EMAIL'}). Last updated by: {securitySettings.updatedBy || 'System Default'}.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpen2FaApprovalModal(!securitySettings.enforceTwoFactor, securitySettings.twoFactorMethod || 'email')}
+                      className="min-h-[40px] px-4 rounded-xl bg-[#DC2626] text-white text-xs font-semibold hover:bg-red-700 transition-colors cursor-pointer"
+                    >
+                      {securitySettings.enforceTwoFactor ? 'Disable 2FA Policy' : 'Enforce 2FA Policy'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Permanent Company & Resolution Deletion */}
+                <div className="p-5 rounded-xl bg-white border border-slate-200 space-y-4">
+                  <h3 className="text-sm font-semibold text-[#0F172A]">Permanent Company &amp; Associated Resolutions Deletion</h3>
+                  <p className="text-xs text-slate-500">
+                    Permanently delete a real client company and all its resolutions from Firestore. This action is irreversible.
+                  </p>
+                  <form onSubmit={handleExecuteCompanyDangerDelete} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Select Client Company</label>
+                      <select
+                        value={companyDeleteTargetId}
+                        onChange={(e) => setCompanyDeleteTargetId(e.target.value)}
+                        className="w-full min-h-[42px] px-3.5 rounded-xl border border-slate-300 text-xs text-[#0F172A] focus:outline-none focus:border-[#DC2626]"
+                      >
+                        <option value="">-- Choose real company to delete --</option>
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name} ({c.uen})</option>
+                        ))}
+                      </select>
+                    </div>
+                    {companyDeleteTargetId && (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Type exact company name <span className="font-mono font-bold text-[#DC2626]">"{companies.find(c => c.id === companyDeleteTargetId)?.name}"</span> to confirm:
+                        </label>
+                        <input
+                          type="text"
+                          value={companyDeleteConfirmName}
+                          onChange={(e) => setCompanyDeleteConfirmName(e.target.value)}
+                          placeholder="Type exact company name here"
+                          className="w-full min-h-[42px] px-3.5 rounded-xl border border-slate-300 text-xs text-[#0F172A] focus:outline-none focus:border-[#DC2626]"
+                        />
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={deletingCompany || !companyDeleteTargetId || companyDeleteConfirmName.trim().toLowerCase() !== companies.find(c => c.id === companyDeleteTargetId)?.name.toLowerCase()}
+                      className="min-h-[42px] px-5 rounded-xl bg-[#DC2626] text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                      {deletingCompany ? 'Deleting Company...' : 'Permanently Delete Company & Resolutions'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* 3. Permanent User Account Revocation & Deletion */}
+                <div className="p-5 rounded-xl bg-white border border-slate-200 space-y-4">
+                  <h3 className="text-sm font-semibold text-[#0F172A]">Permanent User Account Revocation &amp; Deletion</h3>
+                  <p className="text-xs text-slate-500">
+                    Permanently delete an authorized user profile from Firestore.
+                  </p>
+                  <form onSubmit={handleExecuteUserDangerDelete} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Select User Account</label>
+                      <select
+                        value={userDeleteTargetUid}
+                        onChange={(e) => setUserDeleteTargetUid(e.target.value)}
+                        className="w-full min-h-[42px] px-3.5 rounded-xl border border-slate-300 text-xs text-[#0F172A] focus:outline-none focus:border-[#DC2626]"
+                      >
+                        <option value="">-- Choose user account to delete --</option>
+                        {authorizedUsers.map((u) => (
+                          <option key={u.uid} value={u.uid}>{u.displayName} ({u.email}) - {u.role}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {userDeleteTargetUid && (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Type exact user email <span className="font-mono font-bold text-[#DC2626]">"{authorizedUsers.find(u => u.uid === userDeleteTargetUid)?.email}"</span> to confirm:
+                        </label>
+                        <input
+                          type="email"
+                          value={userDeleteConfirmEmail}
+                          onChange={(e) => setUserDeleteConfirmEmail(e.target.value)}
+                          placeholder="Type exact user email here"
+                          className="w-full min-h-[42px] px-3.5 rounded-xl border border-slate-300 text-xs text-[#0F172A] focus:outline-none focus:border-[#DC2626]"
+                        />
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={deletingUser || !userDeleteTargetUid || userDeleteConfirmEmail.trim().toLowerCase() !== authorizedUsers.find(u => u.uid === userDeleteTargetUid)?.email?.toLowerCase()}
+                      className="min-h-[42px] px-5 rounded-xl bg-[#DC2626] text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                      {deletingUser ? 'Deleting User...' : 'Permanently Revoke & Delete User'}
+                    </button>
+                  </form>
+                </div>
+              </div>
             </section>
           )}
         </main>
@@ -1224,6 +1436,68 @@ export const AdminPortal: React.FC<Props> = ({
           isAdminView={true}
           onClose={() => setViewingResolution(null)}
         />
+      )}
+
+      {/* System Administrator Approval Modal */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 lg:p-8 space-y-6 shadow-2xl border border-red-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 text-[#DC2626] flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[#0F172A]">System Administrator Approval Required</h3>
+                  <p className="text-xs text-slate-500">Change 2FA Security Policy</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApprovalModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-700 cursor-pointer text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirm2FaChange} className="space-y-4">
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                You are requesting to <span className="font-bold">{pendingEnforceTwoFactor ? 'ENFORCE' : 'DISABLE'}</span> Enterprise Two-Factor Authentication (Method: {pendingTwoFactorMethod.toUpperCase()}). This security modification requires a mandatory approval justification for the immutable audit log.
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  System Administrator Approval Reason / Justification *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={approvalReason}
+                  onChange={(e) => setApprovalReason(e.target.value)}
+                  placeholder="e.g. Approved per annual cybersecurity compliance review ticket #SEC-2026-09"
+                  className="w-full p-3.5 rounded-xl border border-slate-300 text-xs text-[#0F172A] focus:outline-none focus:border-[#DC2626]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowApprovalModal(false)}
+                  className="min-h-[42px] px-4 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="min-h-[42px] px-5 rounded-xl bg-[#DC2626] text-white text-xs font-semibold hover:bg-red-700 transition-colors cursor-pointer"
+                >
+                  Verify &amp; Apply Approval
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -241,7 +241,9 @@ service cloud.firestore {
           (
             isOwner(userId) &&
             incoming().role == existing().role &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'designation', 'fcmToken', 'notificationsEnabled', 'updatedAt'])
+            (!('twoFactorEnabled' in incoming()) || incoming().twoFactorEnabled == existing().twoFactorEnabled) &&
+            (!('twoFactorMethod' in incoming()) || incoming().twoFactorMethod == existing().twoFactorMethod) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'designation', 'fcmToken', 'notificationsEnabled', 'twoFactorEnabled', 'twoFactorMethod', 'updatedAt'])
           ) ||
           (
             existing().email == request.auth.token.email &&
@@ -398,7 +400,19 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(notificationId);
     }
 
-    // 10. Collection: /audit_logs/{logId} (Immutable Audit Log)
+    // 10. Collection: /system_settings/{docId} (System Security & 2FA Settings)
+    match /system_settings/{docId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update: if isAdmin() &&
+        request.resource.data.keys().hasAll(['enforceTwoFactor', 'twoFactorMethod', 'updatedAt']) &&
+        request.resource.data.enforceTwoFactor is bool &&
+        request.resource.data.twoFactorMethod in ['sms', 'email', 'totp'] &&
+        request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 11. Collection: /audit_logs/{logId} (Immutable Audit Log)
     match /audit_logs/{logId} {
       allow get: if isSignedIn() && isValidId(logId) && (isAdmin() || existing().userUid == request.auth.uid);
       allow list: if isBootstrappedAdmin() || isAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);

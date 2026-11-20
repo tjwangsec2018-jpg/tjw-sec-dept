@@ -35,8 +35,19 @@ export interface UserProfile {
   designation?: string;
   fcmToken?: string;
   notificationsEnabled?: boolean;
+  twoFactorEnabled?: boolean;
+  twoFactorMethod?: 'sms' | 'email' | 'totp';
+  companyIds?: string[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+}
+
+export interface SystemSecuritySettings {
+  enforceTwoFactor: boolean;
+  twoFactorMethod: 'sms' | 'email' | 'totp';
+  updatedBy?: string;
+  updatedAt?: Timestamp;
+  approvalReason?: string;
 }
 
 export interface Company {
