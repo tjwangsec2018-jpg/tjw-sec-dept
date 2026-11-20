@@ -219,8 +219,8 @@ service cloud.firestore {
 
     // 4. Collection: /users/{userId} (PII Isolated)
     match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
-      allow list: if isBootstrappedAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin() || (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email));
+      allow list: if isBootstrappedAdmin() || isAdmin() || (isSignedIn() && (resource.data.uid == request.auth.uid || (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)));
       allow create: if isVerifiedUser() &&
         isValidId(userId) &&
         isValidUserProfile(incoming(), userId) &&
@@ -228,12 +228,12 @@ service cloud.firestore {
         incoming().updatedAt == request.time &&
         (
           (isOwner(userId) && incoming().role == 'user') ||
-          isAdmin()
+          isAdmin() ||
+          (incoming().email == request.auth.token.email)
         );
       allow update: if isVerifiedUser() &&
         isValidId(userId) &&
         isValidUserProfile(incoming(), userId) &&
-        incoming().uid == existing().uid &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         (
@@ -242,6 +242,10 @@ service cloud.firestore {
             isOwner(userId) &&
             incoming().role == existing().role &&
             incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'designation', 'fcmToken', 'notificationsEnabled', 'updatedAt'])
+          ) ||
+          (
+            existing().email == request.auth.token.email &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'displayName', 'updatedAt'])
           )
         );
       allow delete: if isAdmin() && isValidId(userId);

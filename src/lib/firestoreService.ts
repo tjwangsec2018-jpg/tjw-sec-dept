@@ -57,13 +57,13 @@ export async function countAdmins(): Promise<number> {
 
 export async function ensureUserProfile(user: User, loginTab: 'user' | 'admin' = 'user'): Promise<UserProfile> {
   const userPath = `users/${user.uid}`;
+  const emailLower = (user.email || '').toLowerCase().trim();
+  const isBootstrapped = emailLower === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase();
+  const totalAdmins = await countAdmins();
+
   try {
     const ref = doc(db, 'users', user.uid);
     const snap = await getDoc(ref);
-    const isBootstrapped =
-      Boolean(user.emailVerified) || Boolean(user.email) ? user.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase() : false;
-
-    const totalAdmins = await countAdmins();
 
     if (snap.exists()) {
       const existing = snap.data() as UserProfile;
@@ -74,7 +74,6 @@ export async function ensureUserProfile(user: User, loginTab: 'user' | 'admin' =
       } else if (loginTab === 'admin' && totalAdmins === 0) {
         finalRole = 'admin';
       } else if (loginTab === 'admin' && existing.role !== 'admin' && totalAdmins > 0) {
-        // Regular user trying to log in on admin tab when admins already exist
         finalRole = 'user';
       }
 
@@ -88,55 +87,147 @@ export async function ensureUserProfile(user: User, loginTab: 'user' | 'admin' =
       return existing;
     }
 
-    // Determine role for new profile
-    let role: UserRole = 'user';
-    if (isBootstrapped) {
-      role = 'admin';
-    } else if (loginTab === 'admin' && totalAdmins === 0) {
-      role = 'admin';
-    } else if (loginTab === 'admin') {
-      role = 'user';
-    } else {
-      role = 'user';
-    }
-
-    const displayName = clampString(
-      user.displayName || user.email?.split('@')[0] || user.phoneNumber || 'User',
-      120
-    );
-
-    const profilePayload: Record<string, unknown> = {
-      uid: user.uid,
-      displayName,
-      role,
-      designation: role === 'admin' ? 'Managing Corporate Secretary' : 'Board Director',
-      fcmToken: '',
-      notificationsEnabled:
-        typeof Notification !== 'undefined' && Notification.permission === 'granted',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
-    if (user.email) profilePayload.email = clampString(user.email.toLowerCase(), 160);
-    if (user.phoneNumber) profilePayload.phone = clampString(user.phoneNumber, 32);
-
-    if (user.uid) {
+    // If logging in as admin tab
+    if (loginTab === 'admin') {
+      let role: UserRole = 'user';
+      if (isBootstrapped || totalAdmins === 0) {
+        role = 'admin';
+      } else {
+        role = 'user';
+      }
+      const displayName = clampString(
+        user.displayName || emailLower.split('@')[0] || 'Admin',
+        120
+      );
+      const profilePayload = {
+        uid: user.uid,
+        displayName,
+        email: emailLower,
+        role,
+        designation: role === 'admin' ? 'Managing Corporate Secretary' : 'Board Director',
+        fcmToken: '',
+        notificationsEnabled: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
       await setDoc(ref, profilePayload);
+      return {
+        uid: user.uid,
+        displayName,
+        email: emailLower,
+        role,
+        designation: profilePayload.designation,
+        fcmToken: '',
+        notificationsEnabled: false,
+      };
     }
 
-    return {
-      uid: user.uid,
-      displayName,
-      email: user.email?.toLowerCase() || undefined,
-      phone: user.phoneNumber || undefined,
-      role,
-      designation: profilePayload.designation as string,
-      fcmToken: '',
-      notificationsEnabled: profilePayload.notificationsEnabled as boolean,
-    };
+    // Logging in as user tab: search pre-registered users collection by email
+    if (emailLower) {
+      const qEmail = query(collection(db, 'users'), where('email', '==', emailLower));
+      const emailSnap = await getDocs(qEmail);
+
+      if (!emailSnap.empty) {
+        const docSnap = emailSnap.docs[0];
+        const existing = docSnap.data() as UserProfile;
+        const preRegRef = doc(db, 'users', docSnap.id);
+
+        const updatedPayload = {
+          uid: user.uid,
+          displayName: clampString(user.displayName || existing.displayName || emailLower.split('@')[0], 120),
+          updatedAt: serverTimestamp(),
+        };
+        await updateDoc(preRegRef, updatedPayload);
+
+        return {
+          ...existing,
+          uid: user.uid,
+          displayName: updatedPayload.displayName,
+          email: emailLower,
+        };
+      }
+    }
+
+    if (isBootstrapped || totalAdmins === 0) {
+      const role: UserRole = 'admin';
+      const displayName = clampString(user.displayName || emailLower.split('@')[0] || 'User', 120);
+      const profilePayload = {
+        uid: user.uid,
+        displayName,
+        email: emailLower,
+        role,
+        designation: 'Managing Corporate Secretary',
+        fcmToken: '',
+        notificationsEnabled: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDoc(ref, profilePayload);
+      return {
+        uid: user.uid,
+        displayName,
+        email: emailLower,
+        role,
+        designation: 'Managing Corporate Secretary',
+        fcmToken: '',
+        notificationsEnabled: false,
+      };
+    }
+
+    throw new Error('Your email is not registered yet. Please contact your Company Secretary Administrator to activate your access.');
   } catch (error) {
+    if (error instanceof Error && error.message.includes('not registered yet')) {
+      throw error;
+    }
     handleFirestoreError(error, OperationType.WRITE, userPath);
   }
+}
+
+export async function preRegisterAuthorizedUser(
+  adminUid: string,
+  input: { email: string; displayName: string; designation?: string }
+): Promise<void> {
+  const emailLower = input.email.toLowerCase().trim();
+  const userDocId = `user_${emailLower.replace(/[^a-z0-9]/g, '_')}`;
+  const path = `users/${userDocId}`;
+  try {
+    await setDoc(doc(db, 'users', userDocId), {
+      uid: '',
+      displayName: clampString(input.displayName, 120),
+      email: emailLower,
+      role: 'user',
+      designation: clampString(input.designation || 'Board Director', 120),
+      fcmToken: '',
+      notificationsEnabled: false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function deleteUserProfile(userId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}`);
+  }
+}
+
+export function subscribeUsers(
+  onData: (users: UserProfile[]) => void
+): Unsubscribe {
+  const colRef = collection(db, 'users');
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ uid: d.id, ...(d.data() as Omit<UserProfile, 'uid'>) }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+      onData(list);
+    },
+    (err) => handleFirestoreError(err, OperationType.LIST, 'users')
+  );
 }
 
 

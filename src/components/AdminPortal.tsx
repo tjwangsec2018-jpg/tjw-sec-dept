@@ -15,6 +15,8 @@ import {
   Smartphone,
   ShieldCheck,
   Trash2,
+  UserCheck,
+  UserPlus,
 } from 'lucide-react';
 import {
   AuditLogItem,
@@ -29,6 +31,8 @@ import {
   deleteCompany,
   deleteResolution,
   deleteAuditLog,
+  preRegisterAuthorizedUser,
+  deleteUserProfile,
   runAutomatedEscalationSweep,
   sendManualPushNudge,
 } from '../lib/firestoreService';
@@ -36,7 +40,7 @@ import { AdminUploadModal, NewCompanyModal } from './AdminUploadModal';
 import { ResolutionViewerModal } from './ResolutionViewerModal';
 import { PWAInstallButton } from './PWAInstallButton';
 
-type AdminSection = 'board' | 'companies' | 'escalations' | 'audit';
+type AdminSection = 'board' | 'companies' | 'users' | 'escalations' | 'audit';
 type DeadlineFilter = 'all' | 'overdue' | '48h' | '7d';
 
 interface Props {
@@ -46,6 +50,7 @@ interface Props {
   resolutions: Resolution[];
   notifications: NotificationItem[];
   auditLogs: AuditLogItem[];
+  authorizedUsers: UserProfile[];
   onSwitchToDirectorMobile: () => void;
   onSignOut: () => void;
 }
@@ -58,6 +63,7 @@ export const AdminPortal: React.FC<Props> = ({
   resolutions,
   notifications,
   auditLogs,
+  authorizedUsers,
   onSwitchToDirectorMobile,
   onSignOut,
 }) => {
@@ -74,6 +80,10 @@ export const AdminPortal: React.FC<Props> = ({
   const [nudgingId, setNudgingId] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
+  const [clientEmail, setClientEmail] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [clientDesignation, setClientDesignation] = useState('Board Director');
+  const [registeringUser, setRegisteringUser] = useState(false);
 
   const notify = (msg: string) => {
     setBannerNotice(msg);
@@ -252,6 +262,22 @@ export const AdminPortal: React.FC<Props> = ({
 
             <button
               type="button"
+              onClick={() => setSection('users')}
+              className={`w-full min-h-[42px] px-3.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors cursor-pointer ${
+                section === 'users'
+                  ? 'bg-slate-800 text-white'
+                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+              }`}
+            >
+              <UserCheck className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">Authorized Users</span>
+              <span className="ml-auto font-mono text-xs text-slate-400 tabular-nums">
+                {authorizedUsers.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setSection('escalations')}
               className={`w-full min-h-[42px] px-3.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors cursor-pointer ${
                 section === 'escalations'
@@ -324,7 +350,11 @@ export const AdminPortal: React.FC<Props> = ({
                 ? 'Live Tracking Board'
                 : section === 'companies'
                   ? 'Client Companies'
-                  : 'Automated Escalation Rules'}
+                  : section === 'users'
+                    ? 'Authorized Users & Clients'
+                    : section === 'escalations'
+                      ? 'Automated Escalation Rules'
+                      : 'Immutable Audit Logs'}
             </h1>
           </div>
 
@@ -825,6 +855,163 @@ export const AdminPortal: React.FC<Props> = ({
                       </div>
                     ))
                   )}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* SECTION: AUTHORIZED USERS */}
+          {section === 'users' && (
+            <section className="space-y-6">
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                <div>
+                  <h2 className="text-base font-bold text-[#0F172A]">
+                    Pre-Register Authorized Client Users
+                  </h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Add client email addresses and names before they sign in. When they sign in with Google or Email/Password using their registered email, their access is activated instantly.
+                  </p>
+                </div>
+
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!clientEmail.trim() || !clientEmail.includes('@')) {
+                      notify('Please enter a valid email address.');
+                      return;
+                    }
+                    setRegisteringUser(true);
+                    try {
+                      await preRegisterAuthorizedUser(user.uid, {
+                        email: clientEmail.trim(),
+                        displayName: clientName.trim() || clientEmail.split('@')[0],
+                        designation: clientDesignation,
+                      });
+                      notify(`Client ${clientEmail.trim()} successfully pre-registered.`);
+                      setClientEmail('');
+                      setClientName('');
+                    } catch (err) {
+                      notify(err instanceof Error ? err.message : 'Failed to pre-register user.');
+                    } finally {
+                      setRegisteringUser(false);
+                    }
+                  }}
+                  className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2"
+                >
+                  <input
+                    type="email"
+                    required
+                    value={clientEmail}
+                    onChange={(e) => setClientEmail(e.target.value)}
+                    placeholder="client@company.com"
+                    className="min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
+                  />
+                  <input
+                    type="text"
+                    required
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    placeholder="Full Legal Name"
+                    className="min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={clientDesignation}
+                    onChange={(e) => setClientDesignation(e.target.value)}
+                    placeholder="Designation (e.g. Director)"
+                    className="min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={registeringUser}
+                    className="min-h-[42px] px-4 rounded-lg bg-[#0F172A] text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-60 inline-flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    {registeringUser ? 'Pre-Registering...' : 'Pre-Register User'}
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-[#0F172A]">
+                    Registered User Directory
+                  </h3>
+                  <span className="font-mono text-xs text-slate-500 tabular-nums">
+                    {authorizedUsers.length} user(s)
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-100 overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold text-slate-500">
+                        <th className="py-3 px-4">Name &amp; Email</th>
+                        <th className="py-3 px-4">Role</th>
+                        <th className="py-3 px-4">Designation</th>
+                        <th className="py-3 px-4">Account Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm">
+                      {authorizedUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-10 text-center text-sm text-slate-500">
+                            No authorized users pre-registered yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        authorizedUsers.map((u) => {
+                          const isClaimed = Boolean(u.uid && u.uid.length > 0);
+                          return (
+                            <tr key={u.uid || u.email} className="hover:bg-slate-50/70">
+                              <td className="py-3.5 px-4">
+                                <p className="font-semibold text-[#0F172A]">{u.displayName}</p>
+                                <p className="text-xs font-mono text-slate-500">{u.email || 'No email'}</p>
+                              </td>
+                              <td className="py-3.5 px-4 text-xs font-mono uppercase text-slate-700">
+                                {u.role}
+                              </td>
+                              <td className="py-3.5 px-4 text-xs text-slate-600">
+                                {u.designation || 'Board Director'}
+                              </td>
+                              <td className="py-3.5 px-4 text-xs whitespace-nowrap">
+                                {isClaimed ? (
+                                  <span className="font-semibold text-[#059669] inline-flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Active (Signed In)
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold text-[#D97706]">
+                                    Pre-Registered (Pending Login)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                {u.email?.toLowerCase() !== user.email?.toLowerCase() && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!window.confirm(`Permanently remove authorization for ${u.email}?`)) return;
+                                      try {
+                                        await deleteUserProfile(u.uid || `user_${(u.email || '').replace(/[^a-z0-9]/g, '_')}`);
+                                        notify(`Removed authorization for ${u.email}`);
+                                      } catch (err) {
+                                        notify(err instanceof Error ? err.message : 'Failed to delete user.');
+                                      }
+                                    }}
+                                    className="min-h-[32px] px-2.5 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-[#DC2626] hover:bg-red-100 cursor-pointer inline-flex items-center gap-1"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Revoke
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </section>

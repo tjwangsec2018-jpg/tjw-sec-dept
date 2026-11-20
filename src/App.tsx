@@ -7,6 +7,7 @@ import {
   subscribeCompanies,
   subscribeNotifications,
   subscribeResolutions,
+  subscribeUsers,
 } from './lib/firestoreService';
 import { hasDirectorSigned } from './lib/escalation';
 import { showLocalPushNotification, syncAppBadgeCount } from './lib/badging';
@@ -27,6 +28,7 @@ function QuorumSealWorkspace() {
   const [resolutions, setResolutions] = useState<Resolution[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+  const [authorizedUsers, setAuthorizedUsers] = useState<UserProfile[]>([]);
 
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const initialNotifLoadedRef = useRef(false);
@@ -41,6 +43,7 @@ function QuorumSealWorkspace() {
         setResolutions([]);
         setNotifications([]);
         setAuditLogs([]);
+        setAuthorizedUsers([]);
         syncAppBadgeCount(0);
         setAuthReady(true);
         return;
@@ -75,6 +78,7 @@ function QuorumSealWorkspace() {
     const unsubCompanies = subscribeCompanies(user, profile.role, setCompanies);
     const unsubResolutions = subscribeResolutions(user, profile.role, setResolutions);
     const unsubAuditLogs = subscribeAuditLogs(user, profile.role, setAuditLogs);
+    const unsubUsers = profile.role === 'admin' ? subscribeUsers(setAuthorizedUsers) : () => {};
     const unsubNotifications = subscribeNotifications(user, profile.role, (items) => {
       setNotifications(items);
 
@@ -101,6 +105,7 @@ function QuorumSealWorkspace() {
       unsubResolutions();
       unsubNotifications();
       unsubAuditLogs();
+      unsubUsers();
     };
   }, [authReady, user, profile]);
 
@@ -147,6 +152,7 @@ function QuorumSealWorkspace() {
         resolutions={resolutions}
         notifications={notifications}
         auditLogs={auditLogs}
+        authorizedUsers={authorizedUsers}
         onSwitchToDirectorMobile={() => setViewMode('user')}
         onSignOut={handleSignOut}
       />
