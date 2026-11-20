@@ -3,8 +3,12 @@ import { User } from 'firebase/auth';
 import {
   BellRing,
   Building2,
+  Check,
   CheckCircle2,
   Clock,
+  Copy,
+  Eye,
+  EyeOff,
   FilePlus2,
   FileText,
   LogOut,
@@ -87,6 +91,15 @@ export const AdminPortal: React.FC<Props> = ({
   const [clientDesignation, setClientDesignation] = useState('Board Director');
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [registeringUser, setRegisteringUser] = useState(false);
+  const [showTempPass, setShowTempPass] = useState(false);
+  const [copiedPass, setCopiedPass] = useState(false);
+
+  const handleCopyPass = () => {
+    if (!clientPassword) return;
+    navigator.clipboard.writeText(clientPassword);
+    setCopiedPass(true);
+    setTimeout(() => setCopiedPass(false), 2500);
+  };
 
   const notify = (msg: string) => {
     setBannerNotice(msg);
@@ -933,16 +946,37 @@ export const AdminPortal: React.FC<Props> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Temporary Password (Optional / Min 6 chars)
+                        Temporary Password (Required, Min 6 chars)
                       </label>
-                      <input
-                        type="password"
-                        minLength={6}
-                        value={clientPassword}
-                        onChange={(e) => setClientPassword(e.target.value)}
-                        placeholder="Leave blank for Google Sign-In only"
-                        className="w-full min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
-                      />
+                      <div className="relative flex items-center">
+                        <input
+                          type={showTempPass ? 'text' : 'password'}
+                          required
+                          minLength={6}
+                          value={clientPassword}
+                          onChange={(e) => setClientPassword(e.target.value)}
+                          placeholder="Min 6 characters"
+                          className="w-full min-h-[42px] px-3.5 pr-20 rounded-lg border border-slate-300 text-sm font-mono"
+                        />
+                        <div className="absolute right-2 flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowTempPass(!showTempPass)}
+                            className="p-1.5 text-slate-500 hover:text-[#0F172A] cursor-pointer"
+                            title={showTempPass ? 'Hide password' : 'Show password'}
+                          >
+                            {showTempPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCopyPass}
+                            className="p-1.5 text-slate-500 hover:text-[#0F172A] cursor-pointer"
+                            title="Copy password"
+                          >
+                            {copiedPass ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">Designation</label>
