@@ -10,6 +10,7 @@ import {
   updateDoc,
   where,
   writeBatch,
+  deleteDoc,
   Unsubscribe,
 } from 'firebase/firestore';
 import {
@@ -793,5 +794,23 @@ export async function markNotificationRead(notifId: string): Promise<void> {
     await updateDoc(doc(db, 'notifications', notifId), { read: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `notifications/${notifId}`);
+  }
+}
+
+export async function deleteCompany(companyId: string): Promise<void> {
+  const path = `companies/${companyId}`;
+  try {
+    await deleteDoc(doc(db, 'companies', companyId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteResolution(resolutionId: string): Promise<void> {
+  const path = `resolutions/${resolutionId}`;
+  try {
+    await deleteDoc(doc(db, 'resolutions', resolutionId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
   }
 }

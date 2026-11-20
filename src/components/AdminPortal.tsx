@@ -13,6 +13,7 @@ import {
   Search,
   Send,
   Smartphone,
+  Trash2,
 } from 'lucide-react';
 import {
   Company,
@@ -23,6 +24,8 @@ import {
 } from '../types';
 import { getDeadlineMetrics, getNextEscalationLabel } from '../lib/escalation';
 import {
+  deleteCompany,
+  deleteResolution,
   runAutomatedEscalationSweep,
   sendManualPushNudge,
 } from '../lib/firestoreService';
@@ -69,6 +72,26 @@ export const AdminPortal: React.FC<Props> = ({
   const notify = (msg: string) => {
     setBannerNotice(msg);
     setTimeout(() => setBannerNotice(null), 5500);
+  };
+
+  const handleDeleteResolution = async (res: Resolution) => {
+    if (!window.confirm(`Permanently delete resolution "${res.title}" (${res.referenceCode})?`)) return;
+    try {
+      await deleteResolution(res.id);
+      notify(`Resolution ${res.referenceCode} deleted permanently.`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to delete resolution.');
+    }
+  };
+
+  const handleDeleteCompany = async (co: Company) => {
+    if (!window.confirm(`Permanently delete client company "${co.name}" (${co.uen})?`)) return;
+    try {
+      await deleteCompany(co.id);
+      notify(`Client company ${co.name} deleted permanently.`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to delete company.');
+    }
   };
 
   const enrichedResolutions = useMemo(() => {
@@ -666,9 +689,20 @@ export const AdminPortal: React.FC<Props> = ({
                               ))}
                             </td>
                             <td className="py-3.5 px-4 text-right font-mono text-xs font-semibold tabular-nums">
-                              <span className={openCount > 0 ? 'text-[#D97706]' : 'text-[#059669]'}>
-                                {openCount} Open
-                              </span>
+                              <div className="flex items-center justify-end gap-3">
+                                <span className={openCount > 0 ? 'text-[#D97706]' : 'text-[#059669]'}>
+                                  {openCount} Open
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCompany(co)}
+                                  className="min-h-[32px] px-2.5 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-[#DC2626] hover:bg-red-100 whitespace-nowrap cursor-pointer inline-flex items-center gap-1"
+                                  title="Permanently delete company"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );

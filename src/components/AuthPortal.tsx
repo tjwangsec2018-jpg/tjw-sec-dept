@@ -58,7 +58,7 @@ export const AuthPortal: React.FC = () => {
       return 'Invalid email or password. Please verify your credentials and try again.';
     }
     if (code === 'auth/user-not-found') {
-      return 'No director account found for this email. Switch to Register Director or use Google Sign-In.';
+      return 'No user account found for this email. Switch to Register User or use Google Sign-In.';
     }
     if (code === 'auth/email-already-in-use') {
       return 'An account already exists with this email. Please sign in instead.';
@@ -287,14 +287,14 @@ export const AuthPortal: React.FC = () => {
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-[#0F172A]">
-                  {emailMode === 'signin' ? 'Executive Email Sign-In' : 'Register Board Director'}
+                  {emailMode === 'signin' ? 'Executive Email Sign-In' : 'Register User'}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setEmailMode(emailMode === 'signin' ? 'register' : 'signin')}
                   className="text-xs font-semibold text-slate-600 hover:text-[#0F172A] underline underline-offset-4 cursor-pointer"
                 >
-                  {emailMode === 'signin' ? 'New director?' : 'Already registered?'}
+                  {emailMode === 'signin' ? 'New user?' : 'Already registered?'}
                 </button>
               </div>
 
@@ -353,7 +353,7 @@ export const AuthPortal: React.FC = () => {
               >
                 <KeyRound className="w-4 h-4" />
                 <span>
-                  {emailMode === 'signin' ? 'Sign In Permanently' : 'Create Director Account'}
+                  {emailMode === 'signin' ? 'Sign In Permanently' : 'Create User Account'}
                 </span>
               </button>
             </form>

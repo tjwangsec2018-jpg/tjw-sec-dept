@@ -20,7 +20,7 @@ function QuorumSealWorkspace() {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [viewMode, setViewMode] = useState<'admin' | 'director'>('director');
+  const [viewMode, setViewMode] = useState<'admin' | 'user'>('user');
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [resolutions, setResolutions] = useState<Resolution[]>([]);
@@ -47,7 +47,7 @@ function QuorumSealWorkspace() {
       try {
         const userProfile = await ensureUserProfile(firebaseUser);
         setProfile(userProfile);
-        setViewMode(userProfile.role === 'admin' ? 'admin' : 'director');
+        setViewMode(userProfile.role === 'admin' ? 'admin' : 'user');
       } catch (err) {
         console.error('Failed to load user profile:', err);
       } finally {
@@ -134,7 +134,7 @@ function QuorumSealWorkspace() {
         companies={companies}
         resolutions={resolutions}
         notifications={notifications}
-        onSwitchToDirectorMobile={() => setViewMode('director')}
+        onSwitchToDirectorMobile={() => setViewMode('user')}
         onSignOut={handleSignOut}
       />
     );
