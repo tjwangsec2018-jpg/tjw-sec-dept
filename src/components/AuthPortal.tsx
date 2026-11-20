@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   RecaptchaVerifier,
   sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
   signInWithPopup,
@@ -59,7 +60,7 @@ export const AuthPortal: React.FC = () => {
     const msg = err instanceof Error ? err.message : String(err);
 
     if (code === 'auth/operation-not-allowed') {
-      return 'This sign-in provider is not yet enabled in your Firebase Console. Please use "Continue with Google" above for instant sign-in.';
+      return "Email/Password sign-in is not enabled in Firebase project 'neon-embassy-mpjks'. Please enable Email/Password in your Firebase Console Authentication settings or use 'Continue with Google' above.";
     }
     if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
       return 'Invalid email or password. Please verify your credentials and try again.';
@@ -112,6 +113,24 @@ export const AuthPortal: React.FC = () => {
           'User account created. A verification link has been sent to your email address.'
         );
       }
+    } catch (err) {
+      setErrorMsg(formatAuthError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim() || !email.includes('@')) {
+      setErrorMsg('Please enter your corporate email address above first.');
+      return;
+    }
+    setLoading(true);
+    setErrorMsg(null);
+    setInfoMsg(null);
+    try {
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      setInfoMsg('Password reset email sent. Please check your inbox.');
     } catch (err) {
       setErrorMsg(formatAuthError(err));
     } finally {
@@ -410,6 +429,18 @@ export const AuthPortal: React.FC = () => {
                         className="w-full min-h-[44px] px-3.5 rounded-xl border border-slate-300 text-sm text-[#0F172A] focus:outline-none focus:border-[#0F172A]"
                       />
                     </div>
+
+                    {emailMode === 'signin' && (
+                      <div className="flex justify-end -mt-2">
+                        <button
+                          type="button"
+                          onClick={handleForgotPassword}
+                          className="text-xs font-semibold text-slate-600 hover:text-[#0F172A] underline underline-offset-4 cursor-pointer"
+                        >
+                          Forgot Password?
+                        </button>
+                      </div>
+                    )}
 
                     <button
                       type="submit"

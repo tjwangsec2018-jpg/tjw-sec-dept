@@ -1,4 +1,7 @@
 import { User } from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { createUserWithEmailAndPassword, getAuth, signOut as signOutAuth } from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
 import {
   collection,
   doc,
@@ -74,7 +77,7 @@ export async function ensureUserProfile(user: User, loginTab: 'user' | 'admin' =
       } else if (loginTab === 'admin' && totalAdmins === 0) {
         finalRole = 'admin';
       } else if (loginTab === 'admin' && existing.role !== 'admin' && totalAdmins > 0) {
-        finalRole = 'user';
+        throw new Error('Access denied. Administrator privileges required.');
       }
 
       if (finalRole !== existing.role) {
@@ -93,8 +96,20 @@ export async function ensureUserProfile(user: User, loginTab: 'user' | 'admin' =
       if (isBootstrapped || totalAdmins === 0) {
         role = 'admin';
       } else {
-        role = 'user';
+        // Check if user email exists in users collection with admin role
+        const qEmail = query(collection(db, 'users'), where('email', '==', emailLower));
+        const emailSnap = await getDocs(qEmail);
+        let foundAdmin = false;
+        emailSnap.forEach((d) => {
+          if ((d.data() as UserProfile).role === 'admin') foundAdmin = true;
+        });
+        role = foundAdmin ? 'admin' : 'user';
       }
+
+      if (role !== 'admin') {
+        throw new Error('Access denied. Administrator privileges required.');
+      }
+
       const displayName = clampString(
         user.displayName || emailLower.split('@')[0] || 'Admin',
         120
@@ -104,7 +119,7 @@ export async function ensureUserProfile(user: User, loginTab: 'user' | 'admin' =
         displayName,
         email: emailLower,
         role,
-        designation: role === 'admin' ? 'Managing Corporate Secretary' : 'Board Director',
+        designation: 'Managing Corporate Secretary',
         fcmToken: '',
         notificationsEnabled: false,
         createdAt: serverTimestamp(),
@@ -174,13 +189,64 @@ export async function ensureUserProfile(user: User, loginTab: 'user' | 'admin' =
       };
     }
 
-    throw new Error('Your email is not registered yet. Please contact your Company Secretary Administrator to activate your access.');
+    throw new Error('Access denied. Your email address has not been registered by the Administrator.');
   } catch (error) {
-    if (error instanceof Error && error.message.includes('not registered yet')) {
+    if (error instanceof Error && (error.message.includes('Access denied') || error.message.includes('not registered'))) {
       throw error;
     }
     handleFirestoreError(error, OperationType.WRITE, userPath);
   }
+}
+
+export async function createClientAuthAndProfile(
+  adminUid: string,
+  input: {
+    email: string;
+    name: string;
+    tempPassword?: string;
+    companyIds: string[];
+    designation?: string;
+  }
+): Promise<string> {
+  const emailLower = input.email.toLowerCase().trim();
+  const nameTrim = input.name.trim() || emailLower.split('@')[0];
+  const companyIds = input.companyIds || [];
+
+  let newUid = `user_${emailLower.replace(/[^a-z0-9]/g, '_')}`;
+
+  if (input.tempPassword && input.tempPassword.length >= 6) {
+    const secondaryAppName = `SecondaryUserCreator_${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, emailLower, input.tempPassword);
+      newUid = cred.user.uid;
+      await signOutAuth(secondaryAuth);
+      await deleteApp(secondaryApp);
+    } catch (err) {
+      try {
+        await deleteApp(secondaryApp);
+      } catch {}
+      throw err;
+    }
+  }
+
+  const userRef = doc(db, 'users', newUid);
+  await setDoc(userRef, {
+    uid: newUid,
+    email: emailLower,
+    displayName: clampString(nameTrim, 120),
+    role: 'user',
+    companyIds,
+    designation: clampString(input.designation || 'Board Director', 120),
+    fcmToken: '',
+    notificationsEnabled: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return newUid;
 }
 
 export async function preRegisterAuthorizedUser(

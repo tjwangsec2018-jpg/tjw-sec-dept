@@ -33,6 +33,7 @@ import {
   deleteAuditLog,
   preRegisterAuthorizedUser,
   deleteUserProfile,
+  createClientAuthAndProfile,
   runAutomatedEscalationSweep,
   sendManualPushNudge,
 } from '../lib/firestoreService';
@@ -82,7 +83,9 @@ export const AdminPortal: React.FC<Props> = ({
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
   const [clientEmail, setClientEmail] = useState('');
   const [clientName, setClientName] = useState('');
+  const [clientPassword, setClientPassword] = useState('');
   const [clientDesignation, setClientDesignation] = useState('Board Director');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [registeringUser, setRegisteringUser] = useState(false);
 
   const notify = (msg: string) => {
@@ -882,53 +885,114 @@ export const AdminPortal: React.FC<Props> = ({
                     }
                     setRegisteringUser(true);
                     try {
-                      await preRegisterAuthorizedUser(user.uid, {
+                      await createClientAuthAndProfile(user.uid, {
                         email: clientEmail.trim(),
-                        displayName: clientName.trim() || clientEmail.split('@')[0],
+                        name: clientName.trim() || clientEmail.split('@')[0],
+                        tempPassword: clientPassword.trim() || undefined,
+                        companyIds: selectedCompanyIds,
                         designation: clientDesignation,
                       });
-                      notify(`Client ${clientEmail.trim()} successfully pre-registered.`);
+                      notify(`Client account for ${clientEmail.trim()} successfully created.`);
                       setClientEmail('');
                       setClientName('');
+                      setClientPassword('');
+                      setSelectedCompanyIds([]);
                     } catch (err) {
-                      notify(err instanceof Error ? err.message : 'Failed to pre-register user.');
+                      notify(err instanceof Error ? err.message : 'Failed to create client account.');
                     } finally {
                       setRegisteringUser(false);
                     }
                   }}
-                  className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2"
+                  className="space-y-4 pt-2"
                 >
-                  <input
-                    type="email"
-                    required
-                    value={clientEmail}
-                    onChange={(e) => setClientEmail(e.target.value)}
-                    placeholder="client@company.com"
-                    className="min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
-                  />
-                  <input
-                    type="text"
-                    required
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    placeholder="Full Legal Name"
-                    className="min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={clientDesignation}
-                    onChange={(e) => setClientDesignation(e.target.value)}
-                    placeholder="Designation (e.g. Director)"
-                    className="min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
-                  />
-                  <button
-                    type="submit"
-                    disabled={registeringUser}
-                    className="min-h-[42px] px-4 rounded-lg bg-[#0F172A] text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-60 inline-flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    {registeringUser ? 'Pre-Registering...' : 'Pre-Register User'}
-                  </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Client Email Address</label>
+                      <input
+                        type="email"
+                        required
+                        value={clientEmail}
+                        onChange={(e) => setClientEmail(e.target.value)}
+                        placeholder="client@company.com"
+                        className="w-full min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Client Full Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={clientName}
+                        onChange={(e) => setClientName(e.target.value)}
+                        placeholder="Eleanor Tan Wei Ling"
+                        className="w-full min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Temporary Password (Optional / Min 6 chars)
+                      </label>
+                      <input
+                        type="password"
+                        minLength={6}
+                        value={clientPassword}
+                        onChange={(e) => setClientPassword(e.target.value)}
+                        placeholder="Leave blank for Google Sign-In only"
+                        className="w-full min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Designation</label>
+                      <input
+                        type="text"
+                        value={clientDesignation}
+                        onChange={(e) => setClientDesignation(e.target.value)}
+                        placeholder="Board Director"
+                        className="w-full min-h-[42px] px-3.5 rounded-lg border border-slate-300 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Client Companies</label>
+                    <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-3 space-y-2 bg-slate-50">
+                      {companies.length === 0 ? (
+                        <p className="text-xs text-slate-500">No client companies created yet.</p>
+                      ) : (
+                        companies.map((co) => (
+                          <label key={co.id} className="flex items-center gap-2.5 text-xs font-medium text-[#0F172A] cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedCompanyIds.includes(co.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCompanyIds((prev) => [...prev, co.id]);
+                                } else {
+                                  setSelectedCompanyIds((prev) => prev.filter((id) => id !== co.id));
+                                }
+                              }}
+                              className="w-4 h-4 accent-[#0F172A]"
+                            />
+                            <span>{co.name} ({co.uen})</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={registeringUser}
+                      className="min-h-[42px] px-5 rounded-lg bg-[#0F172A] text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-60 inline-flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      {registeringUser ? 'Creating Account...' : 'Create Client Account'}
+                    </button>
+                  </div>
                 </form>
               </div>
 
