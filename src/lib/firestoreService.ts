@@ -96,8 +96,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
     if (user.email) profilePayload.email = clampString(user.email.toLowerCase(), 160);
     if (user.phoneNumber) profilePayload.phone = clampString(user.phoneNumber, 32);
 
-    // Only attempt Firestore write if user is verified (email_verified or phone auth)
-    if (user.emailVerified || user.phoneNumber) {
+    if (user.uid) {
       await setDoc(ref, profilePayload);
     }
 
