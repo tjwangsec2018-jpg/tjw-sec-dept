@@ -13,9 +13,11 @@ import {
   Search,
   Send,
   Smartphone,
+  ShieldCheck,
   Trash2,
 } from 'lucide-react';
 import {
+  AuditLogItem,
   Company,
   NotificationItem,
   Resolution,
@@ -26,6 +28,7 @@ import { getDeadlineMetrics, getNextEscalationLabel } from '../lib/escalation';
 import {
   deleteCompany,
   deleteResolution,
+  deleteAuditLog,
   runAutomatedEscalationSweep,
   sendManualPushNudge,
 } from '../lib/firestoreService';
@@ -33,7 +36,7 @@ import { AdminUploadModal, NewCompanyModal } from './AdminUploadModal';
 import { ResolutionViewerModal } from './ResolutionViewerModal';
 import { PWAInstallButton } from './PWAInstallButton';
 
-type AdminSection = 'board' | 'companies' | 'escalations';
+type AdminSection = 'board' | 'companies' | 'escalations' | 'audit';
 type DeadlineFilter = 'all' | 'overdue' | '48h' | '7d';
 
 interface Props {
@@ -42,9 +45,11 @@ interface Props {
   companies: Company[];
   resolutions: Resolution[];
   notifications: NotificationItem[];
+  auditLogs: AuditLogItem[];
   onSwitchToDirectorMobile: () => void;
   onSignOut: () => void;
 }
+
 
 export const AdminPortal: React.FC<Props> = ({
   user,
@@ -52,6 +57,7 @@ export const AdminPortal: React.FC<Props> = ({
   companies,
   resolutions,
   notifications,
+  auditLogs,
   onSwitchToDirectorMobile,
   onSignOut,
 }) => {
@@ -77,7 +83,7 @@ export const AdminPortal: React.FC<Props> = ({
   const handleDeleteResolution = async (res: Resolution) => {
     if (!window.confirm(`Permanently delete resolution "${res.title}" (${res.referenceCode})?`)) return;
     try {
-      await deleteResolution(res.id);
+      await deleteResolution(res.id, res.title, res.companyName, user, profile.role);
       notify(`Resolution ${res.referenceCode} deleted permanently.`);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Failed to delete resolution.');
@@ -87,12 +93,13 @@ export const AdminPortal: React.FC<Props> = ({
   const handleDeleteCompany = async (co: Company) => {
     if (!window.confirm(`Permanently delete client company "${co.name}" (${co.uen})?`)) return;
     try {
-      await deleteCompany(co.id);
+      await deleteCompany(co.id, co.name, user, profile.role);
       notify(`Client company ${co.name} deleted permanently.`);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Failed to delete company.');
     }
   };
+
 
   const enrichedResolutions = useMemo(() => {
     return resolutions.map((r) => ({
@@ -255,7 +262,24 @@ export const AdminPortal: React.FC<Props> = ({
               <BellRing className="w-4 h-4 shrink-0" />
               <span className="whitespace-nowrap">Escalation Rules</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setSection('audit')}
+              className={`w-full min-h-[42px] px-3.5 rounded-lg text-sm font-medium flex items-center gap-3 transition-colors cursor-pointer ${
+                section === 'audit'
+                  ? 'bg-slate-800 text-white'
+                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">Immutable Audit Logs</span>
+              <span className="ml-auto font-mono text-xs text-slate-400 tabular-nums">
+                {auditLogs.length}
+              </span>
+            </button>
           </nav>
+
         </div>
 
         <div className="p-4 border-t border-slate-800 space-y-2.5">
@@ -805,8 +829,88 @@ export const AdminPortal: React.FC<Props> = ({
               </div>
             </section>
           )}
+
+          {/* SECTION 4: IMMUTABLE AUDIT LOGS */}
+          {section === 'audit' && (
+            <section className="space-y-4">
+              <div className="bg-white border border-slate-200 rounded-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-[#0F172A]">
+                    Immutable Audit &amp; Activity Logs
+                  </h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Every key action (uploads, views, downloads, signatures, and reminders) is cryptographically recorded with user identity, role, and timestamp. Log entries are tamper-proof and can only be deleted by administrators.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-[#0F172A]">
+                    Activity Ledger
+                  </h3>
+                  <span className="font-mono text-xs text-slate-500 tabular-nums">
+                    {auditLogs.length} record(s)
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+                  {auditLogs.length === 0 ? (
+                    <p className="p-10 text-sm text-slate-500 text-center">
+                      No audit log entries recorded yet.
+                    </p>
+                  ) : (
+                    auditLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="px-5 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-[#0F172A] px-2 py-0.5 rounded bg-slate-100">
+                              {log.action}
+                            </span>
+                            <span className="font-semibold text-slate-700 truncate">{log.userEmail}</span>
+                            <span className="text-slate-400 uppercase text-[10px] font-mono">({log.userRole})</span>
+                          </div>
+                          <p className="text-slate-600">{log.details}</p>
+                          {log.companyName && (
+                            <p className="text-[11px] text-slate-400">Company: {log.companyName}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="font-mono text-[11px] text-slate-400 tabular-nums">
+                            {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'Just now'}
+                          </span>
+                          {profile.role === 'admin' && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm(`Permanently delete audit log record "${log.action}"?`)) return;
+                                try {
+                                  await deleteAuditLog(log.id);
+                                  notify('Audit log entry deleted.');
+                                } catch (err) {
+                                  notify(err instanceof Error ? err.message : 'Failed to delete audit log.');
+                                }
+                              }}
+                              className="min-h-[32px] px-2.5 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-[#DC2626] hover:bg-red-100 whitespace-nowrap cursor-pointer inline-flex items-center gap-1"
+                              title="Permanently delete audit log entry"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
         </main>
       </div>
+
 
       {showUploadModal && (
         <AdminUploadModal

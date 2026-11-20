@@ -204,6 +204,19 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['userUid', 'userEmail', 'userRole', 'action', 'details', 'createdAt']) &&
+        data.keys().hasOnly(['userUid', 'userEmail', 'userRole', 'action', 'details', 'targetId', 'companyName', 'createdAt']) &&
+        isValidId(data.userUid) &&
+        data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 160 &&
+        data.userRole in ['admin', 'user'] &&
+        data.action is string && data.action.size() >= 1 && data.action.size() <= 80 &&
+        data.details is string && data.details.size() >= 1 && data.details.size() <= 500 &&
+        (!('targetId' in data) || (data.targetId is string && data.targetId.size() <= 64)) &&
+        (!('companyName' in data) || (data.companyName is string && data.companyName.size() <= 160)) &&
+        data.createdAt is timestamp;
+    }
+
     // 4. Collection: /users/{userId} (PII Isolated)
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
@@ -246,12 +259,10 @@ service cloud.firestore {
       allow delete: if isBootstrappedAdmin() && isValidId(userId);
     }
 
-    // 6. Collection: /companies/{companyId}
+    // 6. Collection: /companies/{companyId} (Strict Multi-Tenant Isolation)
     match /companies/{companyId} {
       allow get: if isSignedIn() && isValidId(companyId) && (isAdmin() || isAssignedToCompany(existing()));
-      allow list: if isBootstrappedAdmin() ||
-        (isSignedIn() && resource.data.createdBy == request.auth.uid) ||
-        isAssignedToCompany(resource.data);
+      allow list: if isBootstrappedAdmin() || isAdmin() || isAssignedToCompany(resource.data);
       allow create: if isAdmin() &&
         isValidId(companyId) &&
         isValidCompany(incoming()) &&
@@ -271,12 +282,10 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(companyId);
     }
 
-    // 7. Collection: /resolutions/{resolutionId}
+    // 7. Collection: /resolutions/{resolutionId} (Strict Multi-Tenant Isolation)
     match /resolutions/{resolutionId} {
       allow get: if isSignedIn() && isValidId(resolutionId) && (isAdmin() || isAssignedToResolution(existing()));
-      allow list: if isBootstrappedAdmin() ||
-        (isSignedIn() && resource.data.createdBy == request.auth.uid) ||
-        isAssignedToResolution(resource.data);
+      allow list: if isBootstrappedAdmin() || isAdmin() || isAssignedToResolution(resource.data);
       allow create: if isAdmin() &&
         isValidId(resolutionId) &&
         isValidResolution(incoming()) &&
@@ -292,7 +301,6 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         (
-          // Tier 1: Admin full operational updates (including status/nudge/escalation/deadline overrides)
           (
             isAdmin() &&
             incoming().diff(existing()).affectedKeys().hasOnly([
@@ -302,7 +310,6 @@ service cloud.firestore {
               'escalationSchedule', 'sentEscalations', 'lastNudgedAt', 'nudgeCount', 'updatedAt'
             ])
           ) ||
-          // Tier 2 Action A: Assigned Director marks resolution as viewed (blocked if terminal 'signed')
           (
             existing().status != 'signed' &&
             isAssignedToResolution(existing()) &&
@@ -310,7 +317,6 @@ service cloud.firestore {
             request.auth.uid in incoming().viewedByUids &&
             incoming().status in ['viewed', 'partially_signed', 'overdue']
           ) ||
-          // Tier 2 Action B: Assigned Director signs resolution (blocked if terminal 'signed')
           (
             existing().status != 'signed' &&
             isAssignedToResolution(existing()) &&
@@ -339,14 +345,12 @@ service cloud.firestore {
           isValidId(signatureId) &&
           isValidSignature(incoming(), resolutionId) &&
           incoming().signedAt == request.time &&
-          // Pillar 1: Master Gate on parent resolution
           exists(/databases/$(database)/documents/resolutions/$(resolutionId)) &&
           get(/databases/$(database)/documents/resolutions/$(resolutionId)).data.status != 'signed' &&
           (
             isAdmin() ||
             isAssignedToResolution(get(/databases/$(database)/documents/resolutions/$(resolutionId)).data)
           ) &&
-          // Pillar 7: Atomicity Guarantee via getAfter
           request.auth.uid in getAfter(/databases/$(database)/documents/resolutions/$(resolutionId)).data.signedByUids;
         allow update: if false;
         allow delete: if isAdmin() && isValidId(resolutionId) && isValidId(signatureId);
@@ -388,6 +392,19 @@ service cloud.firestore {
           )
         );
       allow delete: if isAdmin() && isValidId(notificationId);
+    }
+
+    // 10. Collection: /audit_logs/{logId} (Immutable Audit Log)
+    match /audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (isAdmin() || existing().userUid == request.auth.uid);
+      allow list: if isBootstrappedAdmin() || isAdmin() || (isSignedIn() && resource.data.userUid == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(logId) &&
+        isValidAuditLog(incoming()) &&
+        incoming().userUid == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if false; // Immutable audit logs cannot be edited
+      allow delete: if isAdmin() && isValidId(logId); // Only admin can delete logs
     }
   }
 }

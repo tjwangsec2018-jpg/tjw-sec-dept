@@ -23,6 +23,7 @@ import {
 } from './firebase';
 import {
   Company,
+  AuditLogItem,
   NotificationItem,
   NotificationType,
   Resolution,
@@ -820,20 +821,95 @@ export async function markNotificationRead(notifId: string): Promise<void> {
   }
 }
 
-export async function deleteCompany(companyId: string): Promise<void> {
+export async function deleteCompany(companyId: string, companyName: string, user: User, role: UserRole): Promise<void> {
   const path = `companies/${companyId}`;
   try {
     await deleteDoc(doc(db, 'companies', companyId));
+    await recordAuditLog({
+      user,
+      role,
+      action: 'COMPANY_DELETED',
+      details: `Permanent deletion of client company ${companyName}`,
+      targetId: companyId,
+      companyName,
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
 
-export async function deleteResolution(resolutionId: string): Promise<void> {
+export async function deleteResolution(resolutionId: string, resolutionTitle: string, companyName: string, user: User, role: UserRole): Promise<void> {
   const path = `resolutions/${resolutionId}`;
   try {
     await deleteDoc(doc(db, 'resolutions', resolutionId));
+    await recordAuditLog({
+      user,
+      role,
+      action: 'RESOLUTION_DELETED',
+      details: `Permanent deletion of resolution "${resolutionTitle}"`,
+      targetId: resolutionId,
+      companyName,
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
+
+export async function recordAuditLog(params: {
+  user: User;
+  role: UserRole;
+  action: string;
+  details: string;
+  targetId?: string;
+  companyName?: string;
+}): Promise<void> {
+  const { user, role, action, details, targetId, companyName } = params;
+  const logId = makeSafeId('log');
+  const userEmail = clampString(user.email || `${user.uid}@quorumseal.local`, 160);
+  try {
+    await setDoc(doc(db, 'audit_logs', logId), {
+      userUid: user.uid,
+      userEmail,
+      userRole: role,
+      action: clampString(action, 80),
+      details: clampString(details, 500),
+      targetId: targetId ? clampString(targetId, 64) : '',
+      companyName: companyName ? clampString(companyName, 160) : '',
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('Failed to record audit log:', err);
+  }
+}
+
+export function subscribeAuditLogs(
+  user: User,
+  role: UserRole,
+  onData: (logs: AuditLogItem[]) => void
+): Unsubscribe {
+  const colRef = collection(db, 'audit_logs');
+  const q = role === 'admin'
+    ? colRef
+    : query(colRef, where('userUid', '==', user.uid));
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<AuditLogItem, 'id'>) }))
+        .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+      onData(list);
+    },
+    (err) => handleFirestoreError(err, OperationType.LIST, 'audit_logs')
+  );
+}
+
+export async function deleteAuditLog(logId: string): Promise<void> {
+  const path = `audit_logs/${logId}`;
+  try {
+    await deleteDoc(doc(db, 'audit_logs', logId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+

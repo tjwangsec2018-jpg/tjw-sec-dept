@@ -3,13 +3,14 @@ import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { auth } from './lib/firebase';
 import {
   ensureUserProfile,
+  subscribeAuditLogs,
   subscribeCompanies,
   subscribeNotifications,
   subscribeResolutions,
 } from './lib/firestoreService';
 import { hasDirectorSigned } from './lib/escalation';
 import { showLocalPushNotification, syncAppBadgeCount } from './lib/badging';
-import { Company, NotificationItem, Resolution, UserProfile } from './types';
+import { AuditLogItem, Company, NotificationItem, Resolution, UserProfile } from './types';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthPortal } from './components/AuthPortal';
 import { AdminPortal } from './components/AdminPortal';
@@ -25,6 +26,7 @@ function QuorumSealWorkspace() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [resolutions, setResolutions] = useState<Resolution[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
 
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
   const initialNotifLoadedRef = useRef(false);
@@ -38,6 +40,7 @@ function QuorumSealWorkspace() {
         setCompanies([]);
         setResolutions([]);
         setNotifications([]);
+        setAuditLogs([]);
         syncAppBadgeCount(0);
         setAuthReady(true);
         return;
@@ -71,6 +74,7 @@ function QuorumSealWorkspace() {
 
     const unsubCompanies = subscribeCompanies(user, profile.role, setCompanies);
     const unsubResolutions = subscribeResolutions(user, profile.role, setResolutions);
+    const unsubAuditLogs = subscribeAuditLogs(user, profile.role, setAuditLogs);
     const unsubNotifications = subscribeNotifications(user, profile.role, (items) => {
       setNotifications(items);
 
@@ -96,6 +100,7 @@ function QuorumSealWorkspace() {
       unsubCompanies();
       unsubResolutions();
       unsubNotifications();
+      unsubAuditLogs();
     };
   }, [authReady, user, profile]);
 
@@ -141,6 +146,7 @@ function QuorumSealWorkspace() {
         companies={companies}
         resolutions={resolutions}
         notifications={notifications}
+        auditLogs={auditLogs}
         onSwitchToDirectorMobile={() => setViewMode('user')}
         onSignOut={handleSignOut}
       />

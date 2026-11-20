@@ -109,3 +109,15 @@ export interface NotificationItem {
   createdBy: string;
   createdAt?: Timestamp;
 }
+
+export interface AuditLogItem {
+  id: string;
+  userUid: string;
+  userEmail: string;
+  userRole: UserRole;
+  action: string;
+  details: string;
+  targetId?: string;
+  companyName?: string;
+  createdAt?: Timestamp;
+}
