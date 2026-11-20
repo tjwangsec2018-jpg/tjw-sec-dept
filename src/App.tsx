@@ -45,9 +45,16 @@ function QuorumSealWorkspace() {
 
       setUser(firebaseUser);
       try {
-        const userProfile = await ensureUserProfile(firebaseUser);
+        const loginTab = (localStorage.getItem('quorumseal_login_tab') as 'user' | 'admin') || 'user';
+        const userProfile = await ensureUserProfile(firebaseUser, loginTab);
         setProfile(userProfile);
-        setViewMode(userProfile.role === 'admin' ? 'admin' : 'user');
+
+        if (loginTab === 'admin' && userProfile.role !== 'admin') {
+          alert('Administrator access denied. Your account does not have admin privileges. You have been routed to the User portal.');
+          setViewMode('user');
+        } else {
+          setViewMode(userProfile.role === 'admin' ? 'admin' : 'user');
+        }
       } catch (err) {
         console.error('Failed to load user profile:', err);
       } finally {

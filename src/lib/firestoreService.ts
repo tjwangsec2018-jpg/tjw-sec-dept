@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -43,41 +44,63 @@ function clampString(val: string, maxLen: number): string {
   return val.trim().slice(0, maxLen);
 }
 
-export async function ensureUserProfile(user: User): Promise<UserProfile> {
+export async function countAdmins(): Promise<number> {
+  try {
+    const q = query(collection(db, 'users'), where('role', '==', 'admin'));
+    const snap = await getDocs(q);
+    return snap.size;
+  } catch {
+    return 0;
+  }
+}
+
+export async function ensureUserProfile(user: User, loginTab: 'user' | 'admin' = 'user'): Promise<UserProfile> {
   const userPath = `users/${user.uid}`;
   try {
     const ref = doc(db, 'users', user.uid);
     const snap = await getDoc(ref);
     const isBootstrapped =
-      Boolean(user.emailVerified) &&
-      user.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase();
+      Boolean(user.emailVerified) || Boolean(user.email) ? user.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase() : false;
+
+    const totalAdmins = await countAdmins();
 
     if (snap.exists()) {
       const existing = snap.data() as UserProfile;
-      // Ensure bootstrapped admin always reflects admin role
-      if (isBootstrapped && existing.role !== 'admin') {
+      let finalRole = existing.role;
+
+      if (isBootstrapped) {
+        finalRole = 'admin';
+      } else if (loginTab === 'admin' && totalAdmins === 0) {
+        finalRole = 'admin';
+      } else if (loginTab === 'admin' && existing.role !== 'admin' && totalAdmins > 0) {
+        // Regular user trying to log in on admin tab when admins already exist
+        finalRole = 'user';
+      }
+
+      if (finalRole !== existing.role) {
         await updateDoc(ref, {
-          role: 'admin',
+          role: finalRole,
           updatedAt: serverTimestamp(),
         });
-        return { ...existing, role: 'admin' };
+        return { ...existing, role: finalRole };
       }
       return existing;
     }
 
-    // Check /admins/{uid} marker
-    let role: UserRole = isBootstrapped ? 'admin' : 'user';
-    if (!isBootstrapped && user.emailVerified) {
-      try {
-        const adminSnap = await getDoc(doc(db, 'admins', user.uid));
-        if (adminSnap.exists()) role = 'admin';
-      } catch {
-        // Not an admin
-      }
+    // Determine role for new profile
+    let role: UserRole = 'user';
+    if (isBootstrapped) {
+      role = 'admin';
+    } else if (loginTab === 'admin' && totalAdmins === 0) {
+      role = 'admin';
+    } else if (loginTab === 'admin') {
+      role = 'user';
+    } else {
+      role = 'user';
     }
 
     const displayName = clampString(
-      user.displayName || user.email?.split('@')[0] || user.phoneNumber || 'Board Director',
+      user.displayName || user.email?.split('@')[0] || user.phoneNumber || 'User',
       120
     );
 
@@ -114,6 +137,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
     handleFirestoreError(error, OperationType.WRITE, userPath);
   }
 }
+
 
 export async function updateUserNotificationSettings(
   uid: string,

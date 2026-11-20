@@ -17,15 +17,19 @@ import {
   Mail,
   ShieldCheck,
   Smartphone,
+  UserCheck,
+  UserCog,
 } from 'lucide-react';
 import { auth, googleProvider } from '../lib/firebase';
 import { PWAInstallButton } from './PWAInstallButton';
 
-type AuthTab = 'email' | 'phone';
+type PortalTab = 'user' | 'admin';
+type SubAuthTab = 'email' | 'phone';
 
 export const AuthPortal: React.FC = () => {
+  const [portalTab, setPortalTab] = useState<PortalTab>('user');
   const [showOtherOptions, setShowOtherOptions] = useState(false);
-  const [tab, setTab] = useState<AuthTab>('email');
+  const [subTab, setSubTab] = useState<SubAuthTab>('email');
   const [emailMode, setEmailMode] = useState<'signin' | 'register'>('signin');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -80,6 +84,7 @@ export const AuthPortal: React.FC = () => {
     setErrorMsg(null);
     setInfoMsg(null);
     try {
+      localStorage.setItem('quorumseal_login_tab', portalTab);
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
       setErrorMsg(formatAuthError(err));
@@ -94,6 +99,7 @@ export const AuthPortal: React.FC = () => {
     setErrorMsg(null);
     setInfoMsg(null);
     try {
+      localStorage.setItem('quorumseal_login_tab', portalTab);
       if (emailMode === 'signin') {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       } else {
@@ -119,6 +125,7 @@ export const AuthPortal: React.FC = () => {
     setErrorMsg(null);
     setInfoMsg(null);
     try {
+      localStorage.setItem('quorumseal_login_tab', portalTab);
       if (!recaptchaRef.current) {
         recaptchaRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
           size: 'invisible',
@@ -203,13 +210,51 @@ export const AuthPortal: React.FC = () => {
       {/* Right Authentication Workspace */}
       <div className="lg:col-span-7 flex flex-col justify-center items-center p-6 sm:p-10 lg:p-16">
         <div className="w-full max-w-md space-y-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-[#0F172A]">Sign in to QuorumSeal</h2>
-              <p className="text-sm text-slate-500 mt-1">
-                Instant Google authentication for administrators and board users.
-              </p>
-            </div>
+          {/* Two Separate Login Tabs */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/80 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => {
+                setPortalTab('user');
+                setErrorMsg(null);
+                setInfoMsg(null);
+              }}
+              className={`min-h-[46px] rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                portalTab === 'user'
+                  ? 'bg-white text-[#0F172A] shadow-md'
+                  : 'text-slate-600 hover:text-[#0F172A]'
+              }`}
+            >
+              <UserCheck className="w-4 h-4 text-emerald-600" />
+              User Login
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPortalTab('admin');
+                setErrorMsg(null);
+                setInfoMsg(null);
+              }}
+              className={`min-h-[46px] rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                portalTab === 'admin'
+                  ? 'bg-[#0F172A] text-white shadow-md'
+                  : 'text-slate-600 hover:text-[#0F172A]'
+              }`}
+            >
+              <UserCog className="w-4 h-4 text-amber-400" />
+              Administrator Login
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-[#0F172A]">
+              {portalTab === 'user' ? 'Sign in as Client User' : 'Sign in as Administrator'}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {portalTab === 'user'
+                ? 'View assigned resolutions, download documents, and upload signed responses.'
+                : 'Manage client companies, resolution publishing, and push escalation sweeps. (First login becomes admin if 0 exist).'}
+            </p>
           </div>
 
           {/* Primary Instant Access via Google (Prominent at top) */}
@@ -217,7 +262,11 @@ export const AuthPortal: React.FC = () => {
             type="button"
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full min-h-[56px] px-6 py-4 rounded-2xl bg-[#0F172A] text-white text-base font-bold shadow-lg hover:bg-slate-800 disabled:opacity-60 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-3.5 cursor-pointer"
+            className={`w-full min-h-[56px] px-6 py-4 rounded-2xl text-base font-bold shadow-lg disabled:opacity-60 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-3.5 cursor-pointer ${
+              portalTab === 'admin'
+                ? 'bg-[#0F172A] text-white hover:bg-slate-800'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+            }`}
           >
             <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -237,7 +286,13 @@ export const AuthPortal: React.FC = () => {
                 d="M12.17 5.11c1.45 0 2.75.5 3.78 1.48l2.84-2.84C17.07 2.15 14.84 1.18 12.17 1.18 8.3 1.18 4.95 3.38 3.32 6.62l3.31 2.57c.78-2.34 2.96-4.08 5.54-4.08z"
               />
             </svg>
-            <span>{loading ? 'Authenticating with Google...' : 'Continue with Google'}</span>
+            <span>
+              {loading
+                ? 'Authenticating...'
+                : portalTab === 'user'
+                  ? 'Continue with Google (User)'
+                  : 'Continue with Google (Admin)'}
+            </span>
           </button>
 
           {/* Secondary Collapsible Section ("Other sign-in options") */}
@@ -258,12 +313,12 @@ export const AuthPortal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setTab('email');
+                      setSubTab('email');
                       setErrorMsg(null);
                       setInfoMsg(null);
                     }}
                     className={`min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                      tab === 'email'
+                      subTab === 'email'
                         ? 'bg-white text-[#0F172A] shadow-2xs'
                         : 'text-slate-600 hover:text-[#0F172A]'
                     }`}
@@ -274,12 +329,12 @@ export const AuthPortal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setTab('phone');
+                      setSubTab('phone');
                       setErrorMsg(null);
                       setInfoMsg(null);
                     }}
                     className={`min-h-[40px] rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                      tab === 'phone'
+                      subTab === 'phone'
                         ? 'bg-white text-[#0F172A] shadow-2xs'
                         : 'text-slate-600 hover:text-[#0F172A]'
                     }`}
@@ -290,14 +345,14 @@ export const AuthPortal: React.FC = () => {
                 </div>
 
                 {/* Email / Password Form */}
-                {tab === 'email' && (
+                {subTab === 'email' && (
                   <form
                     onSubmit={handleEmailSubmit}
                     className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4"
                   >
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-semibold text-[#0F172A]">
-                        {emailMode === 'signin' ? 'Executive Email Sign-In' : 'Register User'}
+                        {emailMode === 'signin' ? 'Executive Email Sign-In' : 'Register Account'}
                       </h3>
                       <button
                         type="button"
@@ -363,14 +418,14 @@ export const AuthPortal: React.FC = () => {
                     >
                       <KeyRound className="w-4 h-4" />
                       <span>
-                        {emailMode === 'signin' ? 'Sign In Permanently' : 'Create User Account'}
+                        {emailMode === 'signin' ? 'Sign In Permanently' : 'Create Account'}
                       </span>
                     </button>
                   </form>
                 )}
 
                 {/* Phone OTP Form */}
-                {tab === 'phone' && (
+                {subTab === 'phone' && (
                   <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
                     <h3 className="text-sm font-semibold text-[#0F172A]">Mobile Phone OTP Sign-In</h3>
                     {!confirmationResult ? (
