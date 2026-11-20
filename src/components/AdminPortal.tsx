@@ -13,7 +13,6 @@ import {
   Search,
   Send,
   Smartphone,
-  Sparkles,
 } from 'lucide-react';
 import {
   Company,
@@ -25,7 +24,6 @@ import {
 import { getDeadlineMetrics, getNextEscalationLabel } from '../lib/escalation';
 import {
   runAutomatedEscalationSweep,
-  seedSamplePortfolio,
   sendManualPushNudge,
 } from '../lib/firestoreService';
 import { AdminUploadModal, NewCompanyModal } from './AdminUploadModal';
@@ -66,7 +64,6 @@ export const AdminPortal: React.FC<Props> = ({
 
   const [nudgingId, setNudgingId] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
-  const [seeding, setSeeding] = useState(false);
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
 
   const notify = (msg: string) => {
@@ -157,20 +154,6 @@ export const AdminPortal: React.FC<Props> = ({
       notify(err instanceof Error ? err.message : 'Escalation sweep failed.');
     } finally {
       setSweeping(false);
-    }
-  };
-
-  const handleSeedPortfolio = async () => {
-    setSeeding(true);
-    try {
-      await seedSamplePortfolio(user);
-      notify(
-        'Loaded 3 client companies and 4 statutory resolutions with real generated PDFs. Try switching to Director Mobile View to test signing.'
-      );
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'Unable to seed sample portfolio.');
-    } finally {
-      setSeeding(false);
     }
   };
 
@@ -387,30 +370,35 @@ export const AdminPortal: React.FC<Props> = ({
             <section className="space-y-4">
               {resolutions.length === 0 ? (
                 <div className="bg-white border border-slate-200 rounded-xl p-12 text-center space-y-4">
+                  <FileText className="w-10 h-10 text-slate-400 mx-auto mb-2" />
                   <h2 className="text-lg font-bold text-[#0F172A]">
                     No corporate resolutions tracked yet
                   </h2>
-                  <p className="text-sm text-slate-600 max-w-lg mx-auto">
-                    Upload a board resolution PDF to assign directors with instant push notifications, or populate a sample portfolio of 3 client companies and 4 statutory resolutions to evaluate the full workflow immediately.
+                  <p className="text-sm text-slate-600 max-w-md mx-auto">
+                    {companies.length === 0
+                      ? 'First, add a client company to begin issuing corporate resolutions and managing board executions.'
+                      : 'Upload a board resolution PDF or generate one to assign directors with instant push notifications.'}
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSeedPortfolio}
-                      disabled={seeding}
-                      className="min-h-[42px] px-5 rounded-lg bg-[#0F172A] text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-60 inline-flex items-center gap-2 cursor-pointer"
-                    >
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      {seeding ? 'Generating Statutory PDFs...' : 'Load Sample Client Portfolio'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowCompanyModal(true)}
-                      className="min-h-[42px] px-5 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-[#0F172A] hover:bg-slate-50 inline-flex items-center gap-2 cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add First Client Company
-                    </button>
+                    {companies.length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowCompanyModal(true)}
+                        className="min-h-[42px] px-5 rounded-lg bg-[#0F172A] text-white text-sm font-semibold hover:bg-slate-800 inline-flex items-center gap-2 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add First Client Company
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowUploadModal(true)}
+                        className="min-h-[42px] px-5 rounded-lg bg-[#0F172A] text-white text-sm font-semibold hover:bg-slate-800 inline-flex items-center gap-2 cursor-pointer"
+                      >
+                        <FilePlus2 className="w-4 h-4" />
+                        Upload &amp; Assign Resolution
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -645,8 +633,12 @@ export const AdminPortal: React.FC<Props> = ({
                   <tbody className="divide-y divide-slate-100 text-sm">
                     {companies.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-10 text-center text-sm text-slate-500">
-                          No client companies registered yet.
+                        <td colSpan={4} className="py-12 text-center text-sm text-slate-500">
+                          <Building2 className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                          <p className="font-semibold text-[#0F172A]">No client companies registered yet.</p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Click &quot;Add Client Company&quot; above to register your first corporate client.
+                          </p>
                         </td>
                       </tr>
                     ) : (
